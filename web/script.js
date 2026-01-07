@@ -2,6 +2,8 @@
 let currentVideoInfo = null;
 let isDownloading = false;
 let selectedVideoIndices = [];
+let updateDownloadUrl = null;
+let updatePath = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
@@ -40,7 +42,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const savedTheme = localStorage.getItem('theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
     updateThemeButton(savedTheme);
+
+    // Check for updates on startup (silent)
+    setTimeout(() => checkForUpdates(true), 2000);
 });
+
 
 // Theme toggle
 function toggleTheme() {
@@ -485,4 +491,118 @@ function download_complete(success, message) {
 // Request notification permission
 if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();
+}
+// ==================== UPDATE FUNCTIONS ====================
+
+// Check for updates
+async function checkForUpdates(silent = false) {
+    try {
+        const updateBtn = document.getElementById('updateBtn');
+        if (!silent) {
+            updateBtn.textContent = '';
+        }
+        
+        const result = await eel.check_for_updates()();
+        
+        if (!silent) {
+            updateBtn.textContent = '';
+        }
+        
+        if (result.success && result.update_available) {
+            // Show update badge
+            document.getElementById('updateBadge').classList.add('active');
+            updateDownloadUrl = result.download_url;
+            
+            // Update modal content
+            document.getElementById('updateVersionInfo').textContent = 
+                +result.current_version+  v+result.latest_version;
+            
+            // Show modal if not silent or first time
+            if (!silent || !localStorage.getItem('updateDismissed_' + result.latest_version)) {
+                showUpdateModal();
+            }
+        } else if (!silent) {
+            if (result.success) {
+                showStatus('You have the latest version!', 'success');
+            } else {
+                showStatus('Failed to check for updates', 'error');
+            }
+        }
+    } catch (e) {
+        console.error('Update check failed:', e);
+        if (!silent) {
+            showStatus('Failed to check for updates', 'error');
+        }
+    }
+}
+
+// Show update modal
+function showUpdateModal() {
+    document.getElementById('updateModal').classList.add('active');
+    document.getElementById('updateProgress').style.display = 'none';
+    document.getElementById('updateButtons').style.display = 'flex';
+    document.getElementById('updateStatus').textContent = 'A new version is available with improvements and bug fixes.';
+}
+
+// Close update modal
+function closeUpdateModal() {
+    document.getElementById('updateModal').classList.remove('active');
+    // Remember dismissal for this version
+    const version = document.getElementById('updateVersionInfo').textContent.split('')[1].trim();
+    localStorage.setItem('updateDismissed_' + version, 'true');
+}
+
+// Download and install update
+async function downloadAndInstallUpdate() {
+    if (!updateDownloadUrl) {
+        showStatus('No update URL available', 'error');
+        return;
+    }
+    
+    // Show progress
+    document.getElementById('updateButtons').style.display = 'none';
+    document.getElementById('updateProgress').style.display = 'block';
+    document.getElementById('updateStatus').textContent = 'Downloading update...';
+    
+    try {
+        await eel.download_update(updateDownloadUrl)();
+    } catch (e) {
+        console.error('Download failed:', e);
+        document.getElementById('updateStatus').textContent = 'Download failed: ' + e;
+        document.getElementById('updateButtons').style.display = 'flex';
+    }
+}
+
+// Update download progress callback
+eel.expose(update_download_progress);
+function update_download_progress(percent) {
+    document.getElementById('updateProgressBar').style.width = percent + '%';
+    document.getElementById('updateStatus').textContent = 'Downloading update... ' + percent + '%';
+}
+
+// Update download complete callback
+eel.expose(update_download_complete);
+async function update_download_complete(success, pathOrError) {
+    if (success) {
+        updatePath = pathOrError;
+        document.getElementById('updateStatus').textContent = 'Download complete! Installing...';
+        document.getElementById('updateProgressBar').style.width = '100%';
+        
+        // Apply update after short delay
+        setTimeout(async () => {
+            try {
+                const result = await eel.apply_update(updatePath)();
+                if (!result.success) {
+                    document.getElementById('updateStatus').textContent = 'Update failed: ' + result.error;
+                    document.getElementById('updateButtons').style.display = 'flex';
+                }
+            } catch (e) {
+                document.getElementById('updateStatus').textContent = 'Update failed: ' + e;
+                document.getElementById('updateButtons').style.display = 'flex';
+            }
+        }, 1000);
+    } else {
+        document.getElementById('updateStatus').textContent = 'Download failed: ' + pathOrError;
+        document.getElementById('updateButtons').style.display = 'flex';
+    }
 }

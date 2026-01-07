@@ -839,3 +839,121 @@ select:focus {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
 }
+
+/* Update Button Styles */
+.update-btn {
+    position: relative;
+}
+
+.update-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 10px;
+    height: 10px;
+    background: #e74c3c;
+    border-radius: 50%;
+    display: none;
+    animation: pulse 1.5s infinite;
+}
+
+.update-badge.active {
+    display: block;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.2); opacity: 0.7; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* Update Modal */
+.update-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.update-modal.active {
+    display: flex;
+}
+
+.update-modal-content {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 400px;
+    width: 90%;
+    text-align: center;
+    border: 1px solid var(--border-color);
+}
+
+.update-modal h2 {
+    margin-bottom: 16px;
+    color: var(--text-color);
+}
+
+.update-modal p {
+    margin-bottom: 12px;
+    color: var(--text-secondary);
+}
+
+.update-version {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #3498db;
+    margin-bottom: 16px;
+}
+
+.update-progress {
+    width: 100%;
+    height: 8px;
+    background: var(--border-color);
+    border-radius: 4px;
+    margin: 16px 0;
+    overflow: hidden;
+}
+
+.update-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    width: 0%;
+    transition: width 0.3s;
+}
+
+.update-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 16px;
+}
+
+.update-buttons button {
+    padding: 10px 24px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s;
+}
+
+.update-buttons .update-now {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+}
+
+.update-buttons .update-later {
+    background: var(--border-color);
+    color: var(--text-color);
+}
+
+.update-buttons button:hover {
+    transform: translateY(-2px);
+}

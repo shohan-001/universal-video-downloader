@@ -15,6 +15,11 @@
             <h1>🌐 Universal Video Downloader <span id="appVersion" class="version-badge">v1.0.0</span></h1>
             <p>Download from YouTube, Facebook, Twitter, TikTok, Instagram & 1000+ sites</p>
             <div class="header-buttons">
+                <button class="icon-btn update-btn" onclick="checkForUpdates()" title="Check for Updates"
+                    id="updateBtn">
+                    🔄
+                    <span class="update-badge" id="updateBadge"></span>
+                </button>
                 <button class="icon-btn" onclick="openFolder()" title="Open Download Folder">
                     📂
                 </button>
@@ -23,6 +28,7 @@
                 </button>
             </div>
         </div>
+
 
         <div class="input-group">
             <label for="url">🔗 Video URL <span id="siteBadge" class="site-badge"></span></label>
@@ -178,7 +184,24 @@
         </div>
     </div>
 
+    <!-- Update Modal -->
+    <div class="update-modal" id="updateModal">
+        <div class="update-modal-content">
+            <h2>🎉 Update Available!</h2>
+            <div class="update-version" id="updateVersionInfo">v1.0.0 → v1.1.0</div>
+            <p id="updateStatus">A new version is available with improvements and bug fixes.</p>
+            <div class="update-progress" id="updateProgress" style="display: none;">
+                <div class="update-progress-bar" id="updateProgressBar"></div>
+            </div>
+            <div class="update-buttons" id="updateButtons">
+                <button class="update-now" onclick="downloadAndInstallUpdate()">Update Now</button>
+                <button class="update-later" onclick="closeUpdateModal()">Later</button>
+            </div>
+        </div>
+    </div>
+
     <script src="script.js"></script>
+
 </body>
 
 </html>

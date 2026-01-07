@@ -15,6 +15,8 @@ from pathlib import Path
 APP_NAME = "Universal Video Downloader"
 APP_VERSION = "1.0.0"
 APP_AUTHOR = "Shohan"
+GITHUB_REPO = "shohan-001/youtube-downloader-pro"
+GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
 # Initialize Eel
 eel.init('web')
@@ -188,6 +190,121 @@ def get_app_version():
 @eel.expose
 def get_app_name():
     return APP_NAME
+
+@eel.expose
+def check_for_updates():
+    """Check GitHub for latest release"""
+    try:
+        import urllib.request
+        import json
+        
+        req = urllib.request.Request(
+            GITHUB_API_URL,
+            headers={'User-Agent': 'Universal-Video-Downloader'}
+        )
+        
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode())
+        
+        latest_version = data.get('tag_name', '').replace('v', '').replace('-universal', '')
+        current_version = APP_VERSION
+        
+        # Compare versions
+        def parse_version(v):
+            return tuple(map(int, v.split('.')))
+        
+        try:
+            is_newer = parse_version(latest_version) > parse_version(current_version)
+        except:
+            is_newer = False
+        
+        # Find download URL for exe
+        download_url = None
+        for asset in data.get('assets', []):
+            if asset['name'].endswith('.exe'):
+                download_url = asset['browser_download_url']
+                break
+        
+        return {
+            'success': True,
+            'current_version': current_version,
+            'latest_version': latest_version,
+            'update_available': is_newer,
+            'download_url': download_url,
+            'release_notes': data.get('body', ''),
+            'release_url': data.get('html_url', '')
+        }
+    except Exception as e:
+        print(f"[Update] Check failed: {e}")
+        return {
+            'success': False,
+            'error': str(e),
+            'current_version': APP_VERSION,
+            'update_available': False
+        }
+
+@eel.expose
+def download_update(download_url):
+    """Download the update in background"""
+    def download_thread():
+        try:
+            import urllib.request
+            
+            # Download to temp location
+            update_path = os.path.join(APPDATA_DIR, 'update.exe')
+            
+            def progress_hook(count, block_size, total_size):
+                percent = int(count * block_size * 100 / total_size) if total_size > 0 else 0
+                eel.update_download_progress(min(percent, 100))
+            
+            eel.update_download_progress(0)
+            urllib.request.urlretrieve(download_url, update_path, progress_hook)
+            eel.update_download_progress(100)
+            
+            eel.update_download_complete(True, update_path)
+        except Exception as e:
+            print(f"[Update] Download failed: {e}")
+            eel.update_download_complete(False, str(e))
+    
+    thread = threading.Thread(target=download_thread, daemon=True)
+    thread.start()
+    return True
+
+@eel.expose
+def apply_update(update_path):
+    """Apply the downloaded update"""
+    try:
+        if not os.path.exists(update_path):
+            return {'success': False, 'error': 'Update file not found'}
+        
+        # Create a batch script to replace exe after app closes
+        if getattr(sys, 'frozen', False):
+            current_exe = sys.executable
+        else:
+            return {'success': False, 'error': 'Cannot update in development mode'}
+        
+        batch_script = os.path.join(APPDATA_DIR, 'update.bat')
+        
+        with open(batch_script, 'w') as f:
+            f.write('@echo off\n')
+            f.write('echo Updating Universal Video Downloader...\n')
+            f.write('timeout /t 2 /nobreak >nul\n')
+            f.write(f'copy /Y "{update_path}" "{current_exe}"\n')
+            f.write(f'del "{update_path}"\n')
+            f.write(f'start "" "{current_exe}"\n')
+            f.write(f'del "%~f0"\n')
+        
+        # Run the batch script and exit
+        subprocess.Popen(['cmd', '/c', batch_script], 
+                        creationflags=subprocess.CREATE_NO_WINDOW)
+        
+        # Exit the app
+        force_exit()
+        
+        return {'success': True}
+    except Exception as e:
+        print(f"[Update] Apply failed: {e}")
+        return {'success': False, 'error': str(e)}
 
 @eel.expose
 def get_download_folder():
