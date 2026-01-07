@@ -217,6 +217,62 @@ def open_download_folder():
         os.startfile(download_folder)
 
 @eel.expose
+def select_cookies_file():
+    """Open file dialog to select cookies.txt file"""
+    global cookies_file
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        
+        file_path = filedialog.askopenfilename(
+            title="Select Cookies File",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+        )
+        
+        root.destroy()
+        
+        if file_path:
+            cookies_file = file_path
+            save_config()
+            return {'success': True, 'path': file_path}
+        return {'success': False, 'path': ''}
+    except Exception as e:
+        print(f"[Error] select_cookies_file: {e}")
+        return {'success': False, 'path': '', 'error': str(e)}
+
+@eel.expose
+def select_download_folder():
+    """Open folder dialog to select download folder"""
+    global download_folder
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        
+        folder_path = filedialog.askdirectory(
+            title="Select Download Folder",
+            initialdir=download_folder
+        )
+        
+        root.destroy()
+        
+        if folder_path:
+            download_folder = folder_path
+            save_config()
+            return {'success': True, 'path': folder_path}
+        return {'success': False, 'path': ''}
+    except Exception as e:
+        print(f"[Error] select_download_folder: {e}")
+        return {'success': False, 'path': '', 'error': str(e)}
+
+@eel.expose
 def detect_site(url):
     """Detect the site from URL and return site info"""
     url_lower = url.lower()
