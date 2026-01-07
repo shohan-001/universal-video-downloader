@@ -1,0 +1,66 @@
+# YouTube Downloader Pro - Git Ignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Build outputs
+dist/
+build/
+
+# Tauri version (separate project)
+youtube-downloader-tauri/
+youtube-downloader-native/
+
+# Configuration (contains user paths)
+config.json
+
+# FFmpeg (downloaded separately)
+ffmpeg/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
