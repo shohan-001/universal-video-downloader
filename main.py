@@ -15,7 +15,7 @@ from pathlib import Path
 APP_NAME = "Universal Video Downloader"
 APP_VERSION = "1.0.0"
 APP_AUTHOR = "Shohan"
-GITHUB_REPO = "shohan-001/youtube-downloader-pro"
+GITHUB_REPO = "shohan-001/universal-video-downloader"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
 # Initialize Eel
