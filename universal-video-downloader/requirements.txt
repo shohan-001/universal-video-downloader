@@ -1,3 +1,0 @@
-eel
-yt-dlp
-Pillow

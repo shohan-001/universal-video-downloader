@@ -1,4 +1,4 @@
-# YouTube Downloader Pro - Git Ignore
+# Universal Video Downloader - Git Ignore
 
 # Python
 __pycache__/
@@ -48,7 +48,7 @@ Desktop.ini
 dist/
 build/
 
-# Tauri version (separate project)
+# Tauri native version (separate project)
 youtube-downloader-tauri/
 youtube-downloader-native/
 

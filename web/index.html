@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube Downloader Pro</title>
+    <title>Universal Video Downloader</title>
     <script type="text/javascript" src="/eel.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -12,8 +12,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎬 YouTube Downloader Pro <span id="appVersion" class="version-badge">v1.0.0</span></h1>
-            <p>Download videos and playlists in high quality</p>
+            <h1>🌐 Universal Video Downloader <span id="appVersion" class="version-badge">v1.0.0</span></h1>
+            <p>Download from YouTube, Facebook, Twitter, TikTok, Instagram & 1000+ sites</p>
             <div class="header-buttons">
                 <button class="icon-btn" onclick="openFolder()" title="Open Download Folder">
                     📂
@@ -25,8 +25,8 @@
         </div>
 
         <div class="input-group">
-            <label for="url">🔗 YouTube URL</label>
-            <input type="text" id="url" class="url-input" placeholder="Paste video or playlist URL here..."
+            <label for="url">🔗 Video URL <span id="siteBadge" class="site-badge"></span></label>
+            <input type="text" id="url" class="url-input" placeholder="Paste any video URL here..."
                 oninput="handleUrlInput()">
         </div>
 
@@ -41,6 +41,7 @@
                 <img id="thumbnail" src="" alt="Thumbnail" class="thumbnail">
                 <div class="video-details">
                     <h3 id="videoTitle">-</h3>
+                    <p><strong>Source:</strong> <span id="videoSite">-</span></p>
                     <p><strong>Channel:</strong> <span id="videoChannel">-</span></p>
                     <p><strong>Duration:</strong> <span id="videoDuration">-</span></p>
                     <p id="playlistInfo" class="playlist-info-text">
@@ -67,16 +68,13 @@
                 </label>
             </div>
 
-            <!-- Video Selection List -->
             <div class="video-selection" id="videoSelection" style="display: none;">
                 <div class="selection-header">
                     <button class="select-btn" onclick="selectAllVideos()">Select All</button>
                     <button class="select-btn" onclick="deselectAllVideos()">Deselect All</button>
                     <span id="selectedCount">0 selected</span>
                 </div>
-                <div class="video-list" id="videoList">
-                    <!-- Videos will be populated here -->
-                </div>
+                <div class="video-list" id="videoList"></div>
             </div>
         </div>
 
@@ -97,7 +95,7 @@
 
             <div class="option-card">
                 <h3>⚙️ Quality</h3>
-                <select id="quality">
+                <select id="quality" title="Video Quality">
                     <option>Best</option>
                     <option>1080p</option>
                     <option>720p</option>
@@ -109,7 +107,7 @@
 
         <div class="cookie-section">
             <h3>🍪 Authentication (Optional)</h3>
-            <p class="cookie-hint">For age-restricted or private videos, add your cookies.txt file</p>
+            <p class="cookie-hint">For private/restricted videos, add your cookies.txt file</p>
             <div class="cookie-controls">
                 <button class="cookie-btn" onclick="selectCookieFile()">
                     📁 Select Cookies File
@@ -117,7 +115,7 @@
                 <span id="cookieStatus" class="cookie-status">No cookies file selected</span>
             </div>
             <a href="https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp" target="_blank"
-                class="cookie-help">
+                rel="noopener" class="cookie-help">
                 ❓ How to export cookies?
             </a>
         </div>
@@ -125,8 +123,7 @@
         <!-- FFmpeg Section -->
         <div class="ffmpeg-section" id="ffmpegSection" style="display: none;">
             <h3>⚠️ FFmpeg Required</h3>
-            <p class="ffmpeg-hint">FFmpeg is required for audio conversion (MP3). Click below to install automatically.
-            </p>
+            <p class="ffmpeg-hint">FFmpeg is required for audio conversion (MP3). Click below to install.</p>
             <div class="ffmpeg-controls">
                 <button class="ffmpeg-btn" id="ffmpegBtn" onclick="installFFmpeg()">
                     ⬇️ Install FFmpeg

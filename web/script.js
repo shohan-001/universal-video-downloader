@@ -7,8 +7,8 @@ let selectedVideoIndices = [];
 document.addEventListener('DOMContentLoaded', async () => {
     // Load app version
     try {
-        const appInfo = await eel.get_app_info()();
-        document.getElementById('appVersion').textContent = `v${appInfo.version}`;
+        const version = await eel.get_app_version()();
+        document.getElementById('appVersion').textContent = `v${version}`;
     } catch (e) {
         console.error('Failed to get app info:', e);
     }
@@ -24,7 +24,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load saved cookies file
     try {
         const savedCookies = await eel.get_cookies_file()();
-        console.log('[Cookies] Loaded from config:', savedCookies);
         if (savedCookies && savedCookies.length > 0) {
             const filename = savedCookies.split(/[/\\]/).pop();
             document.getElementById('cookieStatus').textContent = `✅ ${filename}`;
@@ -82,7 +81,7 @@ async function changeFolder() {
 // Open download folder
 async function openFolder() {
     try {
-        await eel.open_folder()();
+        await eel.open_download_folder()();
     } catch (e) {
         showStatus('Failed to open folder', 'error');
     }
@@ -91,10 +90,10 @@ async function openFolder() {
 // Check FFmpeg availability
 async function checkFFmpeg() {
     try {
-        const result = await eel.check_ffmpeg()();
+        const installed = await eel.check_ffmpeg()();
         const ffmpegSection = document.getElementById('ffmpegSection');
 
-        if (!result.installed) {
+        if (!installed) {
             ffmpegSection.style.display = 'block';
             showStatus('⚠️ FFmpeg not found. Install it for MP3 conversion.', 'warning');
         } else {
@@ -109,46 +108,36 @@ async function checkFFmpeg() {
 async function installFFmpeg() {
     try {
         const btn = document.getElementById('ffmpegBtn');
-        const status = document.getElementById('ffmpegStatus');
-
         btn.disabled = true;
         btn.textContent = '⏳ Downloading...';
-        status.textContent = 'Starting download...';
-
         await eel.install_ffmpeg()();
     } catch (e) {
-        showStatus('Failed to install FFmpeg: ' + e.message, 'error');
+        showStatus('Failed to install FFmpeg: ' + e, 'error');
         document.getElementById('ffmpegBtn').disabled = false;
         document.getElementById('ffmpegBtn').textContent = '⬇️ Install FFmpeg';
     }
 }
 
-// FFmpeg progress callback
-eel.expose(ffmpeg_progress);
-function ffmpeg_progress(data) {
+// FFmpeg status callback
+eel.expose(update_ffmpeg_status);
+function update_ffmpeg_status(status) {
     const btn = document.getElementById('ffmpegBtn');
-    const status = document.getElementById('ffmpegStatus');
+    const statusEl = document.getElementById('ffmpegStatus');
     const section = document.getElementById('ffmpegSection');
 
-    if (data.status === 'downloading') {
-        btn.textContent = `⏳ Downloading... ${Math.round(data.percent)}%`;
-        status.textContent = `Downloading FFmpeg: ${Math.round(data.percent)}%`;
-    } else if (data.status === 'extracting') {
-        btn.textContent = '📦 Extracting...';
-        status.textContent = 'Extracting files...';
-    } else if (data.status === 'complete') {
+    statusEl.textContent = status;
+
+    if (status.includes('installed')) {
         btn.textContent = '✅ Installed';
-        status.textContent = 'FFmpeg installed successfully!';
-        status.style.color = '#2ECC71';
+        statusEl.style.color = '#2ECC71';
         setTimeout(() => {
             section.style.display = 'none';
         }, 2000);
         showStatus('FFmpeg installed successfully!', 'success');
-    } else if (data.status === 'error') {
+    } else if (status.includes('Error')) {
         btn.disabled = false;
         btn.textContent = '⬇️ Install FFmpeg';
-        status.textContent = 'Error: ' + data.error;
-        status.style.color = '#E74C3C';
+        statusEl.style.color = '#E74C3C';
     }
 }
 
@@ -156,22 +145,18 @@ function ffmpeg_progress(data) {
 async function selectCookieFile() {
     try {
         const result = await eel.select_cookies_file()();
-
         if (result.success) {
             const filename = result.path.split(/[/\\]/).pop();
             document.getElementById('cookieStatus').textContent = `✅ ${filename}`;
             document.getElementById('cookieStatus').classList.add('active');
             showStatus('Cookies file loaded successfully', 'success');
-        } else {
-            showStatus('No cookies file selected', 'info');
         }
     } catch (e) {
         showStatus('Failed to select cookies file', 'error');
-        console.error(e);
     }
 }
 
-// Handle URL input
+// Handle URL input - accepts ANY video URL
 let fetchTimeout;
 async function handleUrlInput() {
     const url = document.getElementById('url').value.trim();
@@ -179,8 +164,8 @@ async function handleUrlInput() {
     const playlistOptions = document.getElementById('playlistOptions');
     const loadingContainer = document.getElementById('loadingContainer');
     const videoInfoContent = document.getElementById('videoInfoContent');
+    const siteBadge = document.getElementById('siteBadge');
 
-    // Clear previous timeout
     clearTimeout(fetchTimeout);
 
     if (!url) {
@@ -188,20 +173,36 @@ async function handleUrlInput() {
         playlistOptions.classList.remove('active');
         loadingContainer.classList.remove('active');
         videoInfoContent.style.display = 'none';
+        siteBadge.textContent = '';
+        siteBadge.className = 'site-badge';
         return;
     }
 
-    // Validate YouTube URL
-    if (!isValidYouTubeUrl(url)) {
+    // Basic URL validation - just check if it looks like a URL
+    if (!isValidUrl(url)) {
         videoInfo.classList.remove('active');
         playlistOptions.classList.remove('active');
+        siteBadge.textContent = '';
         return;
     }
 
-    // Show loading spinner immediately
+    // Detect and show site
+    try {
+        const siteInfo = await eel.detect_site(url)();
+        if (siteInfo.detected) {
+            siteBadge.textContent = siteInfo.site;
+            siteBadge.className = 'site-badge detected';
+        } else {
+            siteBadge.textContent = 'Auto-detect';
+            siteBadge.className = 'site-badge';
+        }
+    } catch (e) {
+        siteBadge.textContent = '';
+    }
+
+    // Fetch video info after short delay
     fetchTimeout = setTimeout(async () => {
         try {
-            // Show loading animation
             videoInfo.classList.add('active');
             loadingContainer.classList.add('active');
             videoInfoContent.style.display = 'none';
@@ -209,7 +210,6 @@ async function handleUrlInput() {
 
             const info = await eel.fetch_video_info(url)();
 
-            // Hide loading, show content
             loadingContainer.classList.remove('active');
             videoInfoContent.style.display = 'flex';
 
@@ -219,7 +219,7 @@ async function handleUrlInput() {
             } else {
                 videoInfo.classList.remove('active');
                 playlistOptions.classList.remove('active');
-                showStatus('Failed to fetch video info: ' + info.error, 'error');
+                showStatus('Failed: ' + info.error, 'error');
             }
         } catch (e) {
             loadingContainer.classList.remove('active');
@@ -228,15 +228,15 @@ async function handleUrlInput() {
             showStatus('Error fetching video info', 'error');
             console.error(e);
         }
-    }, 300);
+    }, 500);
 }
 
-// Validate YouTube URL
-function isValidYouTubeUrl(url) {
+// Basic URL validation - accepts any URL
+function isValidUrl(url) {
+    // Accept any URL that looks like a URL or video ID
     const patterns = [
-        /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/,
-        /^(https?:\/\/)?(music\.youtube\.com)\/.+/,
-        /^[a-zA-Z0-9_-]{11}$/
+        /^https?:\/\/.+/i,           // Any http/https URL
+        /^[a-zA-Z0-9_-]{11}$/        // YouTube video ID
     ];
     return patterns.some(pattern => pattern.test(url));
 }
@@ -249,9 +249,15 @@ function displayVideoInfo(info) {
     const videoInfo = document.getElementById('videoInfo');
     const playlistOptions = document.getElementById('playlistOptions');
 
-    document.getElementById('videoTitle').textContent = info.title;
-    document.getElementById('videoChannel').textContent = info.channel;
-    document.getElementById('videoDuration').textContent = info.duration;
+    document.getElementById('videoTitle').textContent = info.title || 'Unknown';
+    document.getElementById('videoChannel').textContent = info.channel || 'Unknown';
+    document.getElementById('videoDuration').textContent = info.duration || '--:--';
+
+    // Show site/source
+    const videoSite = document.getElementById('videoSite');
+    if (videoSite) {
+        videoSite.textContent = info.site || info.extractor || 'Unknown';
+    }
 
     // Show playlist info if it's a playlist
     const playlistInfo = document.getElementById('playlistInfo');
@@ -260,9 +266,6 @@ function displayVideoInfo(info) {
         document.getElementById('playlistCount').textContent = info.playlist_count || 0;
         playlistInfo.classList.add('active');
         playlistOptions.classList.add('active');
-
-        // Populate video list for selection
-        populateVideoList(info.playlist_videos || []);
     } else {
         playlistInfo.classList.remove('active');
         playlistOptions.classList.remove('active');
@@ -277,7 +280,7 @@ function displayVideoInfo(info) {
         thumbnail.style.display = 'none';
     }
 
-    // Update quality dropdown with ACTUAL available qualities
+    // Update quality dropdown with available qualities
     const mode = document.querySelector('input[name="mode"]:checked').value;
     if (mode === 'video' && info.qualities && info.qualities.length > 0) {
         const qualitySelect = document.getElementById('quality');
@@ -293,52 +296,11 @@ function displayVideoInfo(info) {
     videoInfo.classList.add('active');
 }
 
-// Populate video list for playlist selection
-function populateVideoList(videos) {
-    const videoList = document.getElementById('videoList');
-    videoList.innerHTML = '';
-
-    videos.forEach((video, index) => {
-        const duration = formatDuration(video.duration);
-        const item = document.createElement('div');
-        item.className = 'video-item';
-        item.innerHTML = `
-            <label class="video-checkbox">
-                <input type="checkbox" data-index="${index}" onchange="updateSelectedCount()">
-                <span class="video-number">${index + 1}.</span>
-                <span class="video-title">${escapeHtml(video.title)}</span>
-                <span class="video-duration">${duration}</span>
-            </label>
-        `;
-        videoList.appendChild(item);
-    });
-
-    updateSelectedCount();
-}
-
-function formatDuration(seconds) {
-    if (!seconds) return '--:--';
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
 // Toggle video selection visibility
 function toggleVideoSelection() {
     const mode = document.querySelector('input[name="playlistMode"]:checked').value;
     const videoSelection = document.getElementById('videoSelection');
-
-    if (mode === 'select') {
-        videoSelection.style.display = 'block';
-    } else {
-        videoSelection.style.display = 'none';
-    }
+    videoSelection.style.display = mode === 'select' ? 'block' : 'none';
 }
 
 // Select/Deselect all videos
@@ -388,31 +350,27 @@ async function startDownload() {
     const url = document.getElementById('url').value.trim();
 
     if (!url) {
-        showStatus('Please enter a YouTube URL', 'error');
+        showStatus('Please enter a video URL', 'error');
         return;
     }
 
-    if (!isValidYouTubeUrl(url)) {
-        showStatus('Invalid YouTube URL', 'error');
+    if (!isValidUrl(url)) {
+        showStatus('Invalid URL', 'error');
         return;
     }
 
     const mode = document.querySelector('input[name="mode"]:checked').value;
     const quality = document.getElementById('quality').value;
 
-    // Check playlist mode and selected videos
-    let downloadPlaylist = false;
+    // Check playlist mode
+    let playlistMode = 'single';
     let selectedIndices = null;
 
     if (currentVideoInfo && currentVideoInfo.is_playlist) {
-        const playlistMode = document.querySelector('input[name="playlistMode"]:checked').value;
+        playlistMode = document.querySelector('input[name="playlistMode"]:checked').value;
 
-        if (playlistMode === 'all') {
-            downloadPlaylist = true;
-        } else if (playlistMode === 'select') {
-            downloadPlaylist = true;
+        if (playlistMode === 'select') {
             selectedIndices = selectedVideoIndices;
-
             if (selectedIndices.length === 0) {
                 showStatus('Please select at least one video', 'error');
                 return;
@@ -426,18 +384,13 @@ async function startDownload() {
     document.getElementById('cancelBtn').style.display = 'block';
     document.getElementById('progressSection').classList.add('active');
 
-    // Reset progress
     resetProgress();
 
     try {
         showStatus('Starting download...', 'loading');
-        const result = await eel.start_download(url, mode, quality, downloadPlaylist, selectedIndices)();
-
-        if (!result.success) {
-            throw new Error(result.error || 'Download failed');
-        }
+        await eel.start_download(url, mode, quality, playlistMode, selectedIndices)();
     } catch (e) {
-        showStatus('Failed to start download: ' + e.message, 'error');
+        showStatus('Failed to start download: ' + e, 'error');
         resetUI();
     }
 }
@@ -445,7 +398,6 @@ async function startDownload() {
 // Cancel download
 async function cancelDownload() {
     if (!isDownloading) return;
-
     try {
         await eel.cancel_download()();
         showStatus('Cancelling download...', 'warning');
@@ -490,47 +442,41 @@ function showStatus(message, type = 'info') {
     statusEl.style.color = colors[type] || colors.info;
 }
 
-// Eel exposed functions (called from Python)
+// Eel exposed functions
 eel.expose(update_progress);
-function update_progress(data) {
+function update_progress(percent, speed, eta, size) {
     const progressFill = document.getElementById('progressFill');
     const progressText = document.getElementById('progressText');
-    progressFill.style.width = data.percent + '%';
-    progressText.textContent = Math.round(data.percent) + '%';
 
-    document.getElementById('speed').textContent = data.speed;
-    document.getElementById('eta').textContent = data.eta;
-    document.getElementById('size').textContent = data.size;
+    // Parse percent string
+    let percentNum = parseFloat(percent.replace('%', ''));
+    if (isNaN(percentNum)) percentNum = 0;
 
-    // Update status
-    if (data.status.startsWith('downloading_playlist_')) {
-        const parts = data.status.split('_');
-        const idx = parts[2];
-        const count = parts[3];
-        showStatus(`Downloading video ${idx} of ${count}... ${Math.round(data.percent)}%`, 'loading');
-    } else if (data.status === 'downloading') {
-        showStatus('Downloading... ' + Math.round(data.percent) + '%', 'loading');
-    } else if (data.status === 'processing') {
-        showStatus('Processing and converting...', 'warning');
-    }
+    progressFill.style.width = percentNum + '%';
+    progressText.textContent = Math.round(percentNum) + '%';
+
+    document.getElementById('speed').textContent = speed;
+    document.getElementById('eta').textContent = eta;
+    document.getElementById('size').textContent = size;
+
+    showStatus('Downloading... ' + Math.round(percentNum) + '%', 'loading');
 }
 
 eel.expose(download_complete);
-function download_complete(data) {
-    if (data.success) {
+function download_complete(success, message) {
+    if (success) {
         document.getElementById('progressFill').style.width = '100%';
         document.getElementById('progressText').textContent = '100%';
-        showStatus('✅ Download completed successfully!', 'success');
+        showStatus('✅ ' + message, 'success');
 
-        // Show notification
+        // Browser notification
         if ('Notification' in window && Notification.permission === 'granted') {
             new Notification('Download Complete', {
-                body: currentVideoInfo ? currentVideoInfo.title : 'Your download is ready',
-                icon: currentVideoInfo ? currentVideoInfo.thumbnail : ''
+                body: currentVideoInfo ? currentVideoInfo.title : 'Your download is ready'
             });
         }
     } else {
-        showStatus('❌ ' + data.error, 'error');
+        showStatus('❌ ' + message, 'error');
     }
 
     resetUI();

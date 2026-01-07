@@ -823,3 +823,19 @@ select:focus {
     border-color: var(--primary);
     color: white;
 }
+/* Site Detection Badge */
+.site-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #888;
+}
+
+.site-badge.detected {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}

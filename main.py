@@ -4,31 +4,28 @@ import os
 import sys
 import json
 import threading
-import signal
 import atexit
 import shutil
 import subprocess
 import urllib.request
 import zipfile
-import re
-import time
 from pathlib import Path
 
-# App Version
+# App Info
+APP_NAME = "Universal Video Downloader"
 APP_VERSION = "1.0.0"
-APP_AUTHOR = "Isharaka"
+APP_AUTHOR = "Shohan"
 
 # Initialize Eel
 eel.init('web')
 
-# Configuration file path - Use AppData for professional config storage
+# Configuration paths
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Store config in AppData folder (like professional apps)
-APPDATA_DIR = os.path.join(os.environ.get('APPDATA', BASE_DIR), 'YouTube Downloader Pro')
+APPDATA_DIR = os.path.join(os.environ.get('APPDATA', BASE_DIR), APP_NAME)
 os.makedirs(APPDATA_DIR, exist_ok=True)
 CONFIG_FILE = os.path.join(APPDATA_DIR, 'config.json')
 FFMPEG_DIR = os.path.join(APPDATA_DIR, 'ffmpeg')
@@ -38,111 +35,159 @@ download_folder = str(Path.home() / "Downloads")
 cookies_file = None
 cancel_flag = False
 _app_closing = False
-playlist_progress = {'completed': 0, 'total': 0}
+
+# Popular supported sites (yt-dlp supports 1000+ sites)
+SUPPORTED_SITES = {
+    'youtube.com': 'YouTube',
+    'youtu.be': 'YouTube',
+    'music.youtube.com': 'YouTube Music',
+    'facebook.com': 'Facebook',
+    'fb.watch': 'Facebook',
+    'twitter.com': 'Twitter/X',
+    'x.com': 'Twitter/X',
+    'instagram.com': 'Instagram',
+    'tiktok.com': 'TikTok',
+    'vimeo.com': 'Vimeo',
+    'dailymotion.com': 'Dailymotion',
+    'twitch.tv': 'Twitch',
+    'reddit.com': 'Reddit',
+    'soundcloud.com': 'SoundCloud',
+    'bilibili.com': 'Bilibili',
+    'nicovideo.jp': 'Niconico',
+    'pornhub.com': 'Pornhub',
+    'xvideos.com': 'XVideos',
+    'rumble.com': 'Rumble',
+    'bitchute.com': 'BitChute',
+    'odysee.com': 'Odysee',
+    'bandcamp.com': 'Bandcamp',
+    'mixcloud.com': 'Mixcloud',
+}
 
 def force_exit():
-    """Force exit the application and all child processes"""
     global _app_closing
     if _app_closing:
         return
     _app_closing = True
-    print("[App] Force exiting...")
     os._exit(0)
 
 atexit.register(force_exit)
 
+# Browser detection functions
 def find_edge_path():
-    """Find Microsoft Edge installation"""
-    edge_paths = [
+    paths = [
         r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
         r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
         os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
     ]
-    for path in edge_paths:
+    for path in paths:
         if os.path.exists(path):
             return path
     return None
 
 def find_chrome_path():
-    """Find Google Chrome installation"""
-    chrome_paths = [
+    paths = [
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
         r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
         os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
     ]
-    for path in chrome_paths:
+    for path in paths:
         if os.path.exists(path):
             return path
     return None
 
 def find_brave_path():
-    """Find Brave browser installation"""
-    brave_paths = [
+    paths = [
         os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\Application\brave.exe"),
         r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
-        r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
     ]
-    for path in brave_paths:
+    for path in paths:
         if os.path.exists(path):
             return path
     return None
 
 def find_any_chromium_browser():
-    """Find any Chromium-based browser that supports app mode"""
-    # Try common Chromium browsers in order of preference
-    browsers = [
-        find_edge_path,
-        find_chrome_path,
-        find_brave_path,
-    ]
-    for finder in browsers:
+    for finder in [find_edge_path, find_chrome_path, find_brave_path]:
         path = finder()
         if path:
             return path
     return None
 
-
+# Config management
 def load_config():
-    """Load saved configuration"""
     global download_folder, cookies_file
     try:
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, 'r') as f:
                 config = json.load(f)
-                download_folder = config.get('download_folder', download_folder)
-                saved_cookies = config.get('cookies_file', None)
-                if saved_cookies and os.path.exists(saved_cookies):
-                    cookies_file = saved_cookies
-                else:
-                    cookies_file = None
-                print(f"[Config] Loaded: folder={download_folder}, cookies={cookies_file}")
+                download_folder = config.get('download_folder', str(Path.home() / "Downloads"))
+                cookies_file = config.get('cookies_file', None)
     except Exception as e:
         print(f"[Config] Error loading: {e}")
 
 def save_config():
-    """Save configuration"""
     try:
         config = {
             'download_folder': download_folder,
             'cookies_file': cookies_file
         }
         with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f)
-        print(f"[Config] Saved successfully")
+            json.dump(config, f, indent=2)
     except Exception as e:
         print(f"[Config] Error saving: {e}")
 
-load_config()
-
-# ==================== EXPOSED FUNCTIONS ====================
+# FFmpeg functions
+def get_ffmpeg_path():
+    ffmpeg_exe = os.path.join(FFMPEG_DIR, 'ffmpeg.exe')
+    if os.path.exists(ffmpeg_exe):
+        return FFMPEG_DIR
+    if shutil.which('ffmpeg'):
+        return os.path.dirname(shutil.which('ffmpeg'))
+    return None
 
 @eel.expose
-def get_app_info():
-    """Get app version and author info"""
-    return {
-        'version': APP_VERSION,
-        'author': APP_AUTHOR
-    }
+def check_ffmpeg():
+    return get_ffmpeg_path() is not None
+
+@eel.expose
+def install_ffmpeg():
+    try:
+        eel.update_ffmpeg_status("Downloading FFmpeg...")
+        os.makedirs(FFMPEG_DIR, exist_ok=True)
+        
+        ffmpeg_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+        zip_path = os.path.join(FFMPEG_DIR, "ffmpeg.zip")
+        
+        urllib.request.urlretrieve(ffmpeg_url, zip_path)
+        
+        eel.update_ffmpeg_status("Extracting...")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(FFMPEG_DIR)
+        
+        # Find and move ffmpeg.exe
+        for root, dirs, files in os.walk(FFMPEG_DIR):
+            if 'ffmpeg.exe' in files:
+                for f in ['ffmpeg.exe', 'ffprobe.exe']:
+                    src = os.path.join(root, f)
+                    dst = os.path.join(FFMPEG_DIR, f)
+                    if os.path.exists(src) and src != dst:
+                        shutil.move(src, dst)
+                break
+        
+        os.remove(zip_path)
+        eel.update_ffmpeg_status("FFmpeg installed!")
+        return True
+    except Exception as e:
+        eel.update_ffmpeg_status(f"Error: {str(e)}")
+        return False
+
+# Exposed functions
+@eel.expose
+def get_app_version():
+    return APP_VERSION
+
+@eel.expose
+def get_app_name():
+    return APP_NAME
 
 @eel.expose
 def get_download_folder():
@@ -156,154 +201,70 @@ def set_download_folder(folder):
     return True
 
 @eel.expose
-def select_download_folder():
-    """Open folder dialog to select download folder"""
-    global download_folder
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes('-topmost', True)
-        
-        folder = filedialog.askdirectory(
-            title="Select Download Folder",
-            initialdir=download_folder
-        )
-        
-        root.destroy()
-        
-        if folder:
-            download_folder = folder
-            save_config()
-            print(f"[Folder] Selected: {folder}")
-            return {'success': True, 'path': folder}
-        else:
-            return {'success': False, 'error': 'No folder selected'}
-    except Exception as e:
-        print(f"[Error] select_download_folder: {e}")
-        return {'success': False, 'error': str(e)}
-
-@eel.expose
-def select_cookies_file():
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes('-topmost', True)
-        
-        filepath = filedialog.askopenfilename(
-            title="Select Cookies File",
-            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
-        )
-        
-        root.destroy()
-        
-        if filepath:
-            global cookies_file
-            cookies_file = filepath
-            save_config()
-            print(f"[Cookies] Selected: {filepath}")
-            return {'success': True, 'path': filepath}
-        else:
-            return {'success': False, 'error': 'No file selected'}
-    except Exception as e:
-        print(f"[Error] select_cookies_file: {e}")
-        return {'success': False, 'error': str(e)}
+def set_cookies_file(path):
+    global cookies_file
+    cookies_file = path
+    save_config()
+    return True
 
 @eel.expose
 def get_cookies_file():
-    if cookies_file and os.path.exists(cookies_file):
-        return cookies_file
-    return ""
+    return cookies_file
+
+@eel.expose
+def open_download_folder():
+    if os.path.exists(download_folder):
+        os.startfile(download_folder)
+
+@eel.expose
+def detect_site(url):
+    """Detect the site from URL and return site info"""
+    url_lower = url.lower()
+    for domain, name in SUPPORTED_SITES.items():
+        if domain in url_lower:
+            return {'detected': True, 'site': name, 'domain': domain}
+    # For unknown sites, yt-dlp will try to extract anyway
+    return {'detected': False, 'site': 'Unknown', 'domain': 'auto-detect'}
+
+@eel.expose
+def get_supported_sites():
+    """Return list of popular supported sites"""
+    return list(set(SUPPORTED_SITES.values()))
 
 @eel.expose
 def fetch_video_info(url):
-    """Fetch video/playlist info with ACTUAL available qualities"""
+    """Fetch video info from any supported site"""
     try:
-        # First pass: quick check for playlist
-        ydl_opts_quick = {
+        print(f"[Info] Fetching: {url}")
+        
+        ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'skip_download': True,
-            'extract_flat': True,
-            'playlist_items': '1-50',
+            'extract_flat': 'in_playlist',
         }
         
         if cookies_file and os.path.exists(cookies_file):
-            ydl_opts_quick['cookiefile'] = cookies_file
+            ydl_opts['cookiefile'] = cookies_file
         
-        is_playlist = False
-        playlist_title = None
-        playlist_count = 0
-        playlist_videos = []
-        video_url = url
-        
-        with yt_dlp.YoutubeDL(ydl_opts_quick) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            
-            if info.get('_type') == 'playlist' or 'entries' in info:
-                entries = list(info.get('entries', []))
-                if entries and len(entries) > 0:
-                    is_playlist = True
-                    playlist_title = info.get('title', 'Unknown Playlist')
-                    playlist_count = len(entries)
-                    
-                    # Get video list for selection
-                    for i, entry in enumerate(entries):
-                        if entry:
-                            playlist_videos.append({
-                                'index': i,
-                                'id': entry.get('id', ''),
-                                'title': entry.get('title', f'Video {i+1}'),
-                                'duration': entry.get('duration', 0) or 0,
-                                'url': entry.get('url', entry.get('webpage_url', ''))
-                            })
-                    
-                    # Use first video for quality detection
-                    if entries[0]:
-                        video_url = entries[0].get('url', entries[0].get('webpage_url', url))
         
-        # Second pass: get FULL info with formats for quality detection
-        ydl_opts_full = {
-            'quiet': True,
-            'no_warnings': True,
-            'skip_download': True,
-            'extract_flat': False,  # Get full format info
-            'noplaylist': True,     # Only get this video, not playlist
-        }
+        if not info:
+            return {'success': False, 'error': 'Could not fetch info'}
         
-        if cookies_file and os.path.exists(cookies_file):
-            ydl_opts_full['cookiefile'] = cookies_file
+        # Check if playlist
+        is_playlist = info.get('_type') == 'playlist'
         
-        with yt_dlp.YoutubeDL(ydl_opts_full) as ydl:
-            video_info = ydl.extract_info(video_url, download=False)
-        
-        # Format duration
-        duration = video_info.get('duration', 0) or 0
-        hours = duration // 3600
-        minutes = (duration % 3600) // 60
-        seconds = duration % 60
-        if hours > 0:
-            duration_str = f"{hours}:{minutes:02d}:{seconds:02d}"
-        else:
-            duration_str = f"{minutes}:{seconds:02d}"
-        
-        # Get ACTUAL available qualities from formats
+        # Get formats for quality detection
         available_qualities = ['Best']
-        if 'formats' in video_info:
+        if 'formats' in info:
             heights = set()
-            for f in video_info['formats']:
-                # Only consider video formats with height
+            for f in info['formats']:
                 if f.get('vcodec') != 'none' and f.get('height'):
                     heights.add(f['height'])
             
-            # Sort heights descending and create quality labels
-            sorted_heights = sorted(list(heights), reverse=True)
-            for h in sorted_heights:
+            for h in sorted(list(heights), reverse=True):
                 if h >= 2160:
                     available_qualities.append(f'{h}p (4K)')
                 elif h >= 1440:
@@ -311,201 +272,125 @@ def fetch_video_info(url):
                 else:
                     available_qualities.append(f'{h}p')
         
-        print(f"[Info] Available qualities: {available_qualities}")
+        # Format duration
+        duration_secs = info.get('duration', 0) or 0
+        if duration_secs:
+            hours = int(duration_secs // 3600)
+            minutes = int((duration_secs % 3600) // 60)
+            seconds = int(duration_secs % 60)
+            duration = f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}"
+        else:
+            duration = "--:--"
         
-        return {
+        # Detect site
+        site_info = detect_site(url)
+        
+        result = {
             'success': True,
-            'title': video_info.get('title', 'Unknown'),
-            'channel': video_info.get('channel', video_info.get('uploader', 'Unknown')),
-            'duration': duration_str,
-            'thumbnail': video_info.get('thumbnail', ''),
-            'qualities': available_qualities,
+            'title': info.get('title', 'Unknown'),
+            'channel': info.get('channel') or info.get('uploader') or 'Unknown',
+            'duration': duration,
+            'thumbnail': info.get('thumbnail', ''),
+            'qualities': available_qualities if len(available_qualities) > 1 else ['Best', '1080p', '720p', '480p', '360p'],
             'is_playlist': is_playlist,
-            'playlist_title': playlist_title,
-            'playlist_count': playlist_count,
-            'playlist_videos': playlist_videos
+            'playlist_title': info.get('title', '') if is_playlist else '',
+            'playlist_count': len(info.get('entries', [])) if is_playlist else 0,
+            'site': site_info['site'],
+            'extractor': info.get('extractor', 'Unknown'),
         }
+        
+        print(f"[Info] Site: {result['site']}, Title: {result['title']}")
+        return result
+        
     except Exception as e:
         print(f"[Error] fetch_video_info: {e}")
         return {'success': False, 'error': str(e)}
 
 @eel.expose
-def start_download(url, mode, quality, download_playlist=False, selected_indices=None):
-    """Start download with improved options"""
-    global cancel_flag, playlist_progress
+def start_download(url, mode='video', quality='Best', playlist_mode='single', selected_indices=None):
+    """Download video/audio from any supported site"""
+    global cancel_flag
     cancel_flag = False
-    playlist_progress = {'completed': 0, 'total': 0}
     
-    def download_task():
-        global playlist_progress
+    def download_thread():
+        global cancel_flag
         try:
-            # Create playlist subfolder if downloading playlist
-            target_folder = download_folder
-            if download_playlist:
-                # Get playlist title for folder name
-                try:
-                    with yt_dlp.YoutubeDL({'quiet': True, 'extract_flat': True}) as ydl:
-                        info = ydl.extract_info(url, download=False)
-                        if info.get('title'):
-                            # Sanitize folder name
-                            folder_name = re.sub(r'[<>:"/\\|?*]', '', info['title'])[:50]
-                            target_folder = os.path.join(download_folder, folder_name)
-                            os.makedirs(target_folder, exist_ok=True)
-                            print(f"[Download] Created folder: {target_folder}")
-                except:
-                    pass
+            print(f"[Download] Starting: {url}")
+            print(f"[Download] Mode: {mode}, Quality: {quality}")
             
-            def progress_hook(d):
-                if cancel_flag:
-                    raise Exception("Download cancelled by user")
-                
-                if d['status'] == 'downloading':
-                    try:
-                        if 'total_bytes' in d:
-                            percent = (d['downloaded_bytes'] / d['total_bytes']) * 100
-                        elif 'total_bytes_estimate' in d:
-                            percent = (d['downloaded_bytes'] / d['total_bytes_estimate']) * 100
-                        else:
-                            percent = 0
-                        
-                        speed = d.get('_speed_str', 'N/A')
-                        eta = d.get('_eta_str', 'N/A')
-                        
-                        total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate')
-                        if total_bytes:
-                            size_mb = total_bytes / 1024 / 1024
-                            size_str = f"{size_mb:.1f} MB"
-                        else:
-                            size_str = "N/A"
-                        
-                        status_text = 'downloading'
-                        if 'info_dict' in d:
-                            info = d['info_dict']
-                            if 'playlist_index' in info and 'playlist_count' in info:
-                                idx = info['playlist_index']
-                                count = info['playlist_count']
-                                status_text = f'downloading_playlist_{idx}_{count}'
-                                playlist_progress['total'] = count
-                        
-                        eel.update_progress({
-                            'percent': round(percent, 1),
-                            'speed': speed,
-                            'eta': eta,
-                            'size': size_str,
-                            'status': status_text
-                        })
-                    except Exception as e:
-                        print(f"[Progress Error] {e}")
-                
-                elif d['status'] == 'finished':
-                    playlist_progress['completed'] += 1
-                    eel.update_progress({
-                        'percent': 100,
-                        'speed': '-',
-                        'eta': 'Complete',
-                        'size': '-',
-                        'status': 'processing'
-                    })
+            ffmpeg_path = get_ffmpeg_path()
             
-            # Build yt-dlp options with speed optimizations
+            # Base options
             ydl_opts = {
+                'outtmpl': os.path.join(download_folder, '%(title)s.%(ext)s'),
+                'progress_hooks': [progress_hook],
                 'quiet': True,
                 'no_warnings': True,
-                'progress_hooks': [progress_hook],
-                'paths': {'home': target_folder},
-                'noplaylist': not download_playlist,
-                # Speed optimizations
-                'concurrent_fragment_downloads': 4,
-                'http_chunk_size': 10485760,  # 10MB chunks
-                'retries': 10,
-                'fragment_retries': 10,
-                'file_access_retries': 5,
-                'extractor_retries': 3,
             }
             
-            # Handle selected videos for playlist
-            if download_playlist and selected_indices:
-                # Convert to 1-based indices for yt-dlp
-                items = ','.join(str(i + 1) for i in selected_indices)
-                ydl_opts['playlist_items'] = items
-                print(f"[Download] Selected items: {items}")
+            if ffmpeg_path:
+                ydl_opts['ffmpeg_location'] = ffmpeg_path
             
             if cookies_file and os.path.exists(cookies_file):
                 ydl_opts['cookiefile'] = cookies_file
-                print(f"[Download] Using cookies: {cookies_file}")
             
-            if mode == 'video':
-                if quality == 'Best':
-                    format_str = 'bestvideo+bestaudio/best'
-                else:
-                    match = re.match(r'(\d+)p', quality)
-                    if match:
-                        height = match.group(1)
-                        format_str = f'bestvideo[height<={height}]+bestaudio/best[height<={height}]/best'
-                    else:
-                        format_str = 'bestvideo+bestaudio/best'
-                
-                ydl_opts['format'] = format_str
-                ydl_opts['merge_output_format'] = 'mp4'
-            else:
-                # AUDIO: Try audio-only first, then fall back to LOWEST quality video
-                # This minimizes data usage: bestaudio (~4MB) or worst video (~10MB)
-                ydl_opts['format'] = 'bestaudio/worstaudio/worst'
+            # Playlist handling
+            if playlist_mode == 'single':
+                ydl_opts['noplaylist'] = True
+            elif playlist_mode == 'all':
+                ydl_opts['noplaylist'] = False
+            elif playlist_mode == 'select' and selected_indices:
+                indices = [str(i + 1) for i in selected_indices]
+                ydl_opts['playlist_items'] = ','.join(indices)
+            
+            # Format selection
+            if mode == 'audio':
+                ydl_opts['format'] = 'bestaudio/best'
                 ydl_opts['postprocessors'] = [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
                     'preferredquality': '320',
                 }]
-            
-            print(f"[Download] Starting: {url}")
-            print(f"[Download] Playlist mode: {download_playlist}")
+            else:
+                if quality == 'Best':
+                    ydl_opts['format'] = 'bestvideo+bestaudio/best'
+                else:
+                    height = quality.replace('p', '').split(' ')[0]
+                    ydl_opts['format'] = f'bestvideo[height<={height}]+bestaudio/best[height<={height}]/best'
+                
+                ydl_opts['merge_output_format'] = 'mp4'
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
             
-            eel.download_complete({
-                'success': True,
-                'message': 'Download completed successfully!',
-                'folder': target_folder
-            })
+            if not cancel_flag:
+                eel.download_complete(True, "Download completed!")
             
         except Exception as e:
-            error_msg = str(e)
-            print(f"[Error] download_task: {error_msg}")
-            
-            # Clean up partial files on cancel
-            if cancel_flag:
-                cleanup_partial_files(target_folder if 'target_folder' in dir() else download_folder)
-                completed = playlist_progress['completed']
-                total = playlist_progress['total']
-                if total > 0:
-                    error_msg = f"Cancelled. {completed} of {total} videos downloaded."
-                else:
-                    error_msg = "Download cancelled. Partial files cleaned up."
-            
-            eel.download_complete({
-                'success': False,
-                'error': error_msg
-            })
+            if not cancel_flag:
+                error_msg = str(e)
+                print(f"[Error] Download: {error_msg}")
+                eel.download_complete(False, error_msg)
     
-    thread = threading.Thread(target=download_task, daemon=True)
+    thread = threading.Thread(target=download_thread, daemon=True)
     thread.start()
-    
-    return {'success': True, 'message': 'Download started'}
+    return True
 
-def cleanup_partial_files(folder):
-    """Clean up .part files after cancel"""
-    try:
-        for file in os.listdir(folder):
-            if file.endswith('.part') or file.endswith('.ytdl'):
-                filepath = os.path.join(folder, file)
-                try:
-                    os.remove(filepath)
-                    print(f"[Cleanup] Removed: {file}")
-                except:
-                    pass
-    except Exception as e:
-        print(f"[Cleanup Error] {e}")
+def progress_hook(d):
+    global cancel_flag
+    if cancel_flag:
+        raise Exception("Download cancelled")
+    
+    if d['status'] == 'downloading':
+        try:
+            percent = d.get('_percent_str', '0%').strip()
+            speed = d.get('_speed_str', '-').strip()
+            eta = d.get('_eta_str', '-').strip()
+            total = d.get('_total_bytes_str', '') or d.get('_total_bytes_estimate_str', '-')
+            
+            eel.update_progress(percent, speed, eta, str(total))
+        except:
+            pass
 
 @eel.expose
 def cancel_download():
@@ -513,133 +398,28 @@ def cancel_download():
     cancel_flag = True
     return True
 
-@eel.expose
-def open_folder():
-    try:
-        if sys.platform == 'win32':
-            os.startfile(download_folder)
-        elif sys.platform == 'darwin':
-            os.system(f'open "{download_folder}"')
-        else:
-            os.system(f'xdg-open "{download_folder}"')
-        return True
-    except Exception as e:
-        return False
-
-@eel.expose
-def check_ffmpeg():
-    """Check if FFmpeg is available"""
-    # Check system PATH
-    if shutil.which('ffmpeg'):
-        return {'installed': True, 'path': 'system'}
-    
-    # Check local ffmpeg folder
-    local_ffmpeg = os.path.join(FFMPEG_DIR, 'bin', 'ffmpeg.exe')
-    if os.path.exists(local_ffmpeg):
-        # Add to PATH for this session
-        os.environ['PATH'] = os.path.join(FFMPEG_DIR, 'bin') + os.pathsep + os.environ['PATH']
-        return {'installed': True, 'path': 'local'}
-    
-    return {'installed': False, 'path': None}
-
-@eel.expose
-def install_ffmpeg():
-    """Download and install FFmpeg"""
-    def install_task():
-        try:
-            eel.ffmpeg_progress({'status': 'downloading', 'percent': 0})
-            
-            # FFmpeg download URL (essentials build from gyan.dev)
-            url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
-            zip_path = os.path.join(BASE_DIR, 'ffmpeg.zip')
-            
-            # Download with progress
-            def report_progress(block_num, block_size, total_size):
-                if total_size > 0:
-                    percent = (block_num * block_size / total_size) * 100
-                    eel.ffmpeg_progress({'status': 'downloading', 'percent': min(percent, 100)})
-            
-            urllib.request.urlretrieve(url, zip_path, report_progress)
-            
-            eel.ffmpeg_progress({'status': 'extracting', 'percent': 100})
-            
-            # Extract
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                # Find the root folder name in zip
-                root_folder = zip_ref.namelist()[0].split('/')[0]
-                zip_ref.extractall(BASE_DIR)
-            
-            # Rename to 'ffmpeg'
-            extracted_path = os.path.join(BASE_DIR, root_folder)
-            if os.path.exists(FFMPEG_DIR):
-                shutil.rmtree(FFMPEG_DIR)
-            os.rename(extracted_path, FFMPEG_DIR)
-            
-            # Clean up zip
-            os.remove(zip_path)
-            
-            # Add to PATH
-            os.environ['PATH'] = os.path.join(FFMPEG_DIR, 'bin') + os.pathsep + os.environ['PATH']
-            
-            eel.ffmpeg_progress({'status': 'complete', 'percent': 100})
-            print("[FFmpeg] Installation complete")
-            
-        except Exception as e:
-            print(f"[FFmpeg Error] {e}")
-            eel.ffmpeg_progress({'status': 'error', 'error': str(e)})
-    
-    thread = threading.Thread(target=install_task, daemon=True)
-    thread.start()
-    return {'success': True}
-
-def on_close(page, sockets):
-    print("[App] Window closed, shutting down...")
-    force_exit()
-
+# Main entry point
 if __name__ == '__main__':
-    def signal_handler(sig, frame):
-        print("[App] Signal received, closing...")
-        force_exit()
+    load_config()
     
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    browser_path = find_any_chromium_browser()
     
     try:
-        # Find any Chromium-based browser for app mode (Edge, Chrome, Brave)
-        browser_path = find_any_chromium_browser()
-        
         if browser_path:
-            browser_name = os.path.basename(browser_path).replace('.exe', '').title()
-            print(f"[App] v{APP_VERSION} - Using {browser_name}: {browser_path}")
-            eel.start('index.html',
+            eel.start('index.html', 
                      mode='custom',
-                     cmdline_args=[
-                         browser_path,
-                         '--app=http://localhost:8080/index.html',
-                         '--disable-extensions',
-                         '--disable-sync',
-                         '--no-first-run',
-                         '--start-maximized'
-                     ],
-                     size=(900, 800),
-                     port=8080,
-                     close_callback=on_close,
-                     block=True)
+                     cmdline_args=[browser_path, '--app=http://localhost:8000/index.html'],
+                     size=(950, 850),
+                     port=8000,
+                     close_callback=force_exit)
         else:
-            # FALLBACK: Use default system browser (works on ANY PC)
-            print(f"[App] v{APP_VERSION} - No Chromium browser found, using default browser...")
-            print("[App] The app will open in your default browser.")
-            print("[App] For best experience, install Chrome, Edge, or Brave.")
-            eel.start('index.html',
-                     mode='default',  # Opens in default browser tab
-                     size=(900, 800),
-                     port=8080,
-                     close_callback=on_close,
-                     block=True)
-                     
+            print("[App] No Chromium browser found, using default browser")
+            eel.start('index.html', 
+                     mode='default',
+                     size=(950, 850),
+                     port=8000,
+                     close_callback=force_exit)
     except (SystemExit, KeyboardInterrupt):
-        print("[App] Exited normally")
-    except Exception as e:
-        print(f"[Error] Failed to start: {e}")
+        pass
     finally:
         force_exit()
