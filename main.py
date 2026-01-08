@@ -499,6 +499,12 @@ def start_download(url, mode='video', quality='Best', playlist_mode='single', se
                 'progress_hooks': [progress_hook],
                 'quiet': True,
                 'no_warnings': True,
+                # Speed optimizations
+                'concurrent_fragment_downloads': 4,  # Download 4 fragments simultaneously
+                'buffersize': 1024 * 16,  # 16KB buffer
+                'http_chunk_size': 1024 * 1024 * 10,  # 10MB chunks
+                'retries': 10,
+                'fragment_retries': 10,
             }
             
             if ffmpeg_path:
@@ -549,26 +555,80 @@ def start_download(url, mode='video', quality='Best', playlist_mode='single', se
     thread.start()
     return True
 
+# Global for tracking download process
+_current_ydl = None
+
 def progress_hook(d):
     global cancel_flag
     if cancel_flag:
-        raise Exception("Download cancelled")
+        raise yt_dlp.utils.DownloadCancelled("Download cancelled by user")
     
     if d['status'] == 'downloading':
         try:
-            percent = d.get('_percent_str', '0%').strip()
-            speed = d.get('_speed_str', '-').strip()
-            eta = d.get('_eta_str', '-').strip()
-            total = d.get('_total_bytes_str', '') or d.get('_total_bytes_estimate_str', '-')
+            # Get percent - try multiple fields
+            percent = d.get('_percent_str', '')
+            if not percent:
+                downloaded = d.get('downloaded_bytes', 0)
+                total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                if total > 0:
+                    percent = f"{(downloaded / total) * 100:.1f}%"
+                else:
+                    percent = "0%"
+            percent = percent.strip()
             
-            eel.update_progress(percent, speed, eta, str(total))
-        except:
-            pass
+            # Get speed
+            speed = d.get('_speed_str', '')
+            if not speed:
+                speed_val = d.get('speed', 0)
+                if speed_val:
+                    if speed_val > 1024 * 1024:
+                        speed = f"{speed_val / (1024 * 1024):.2f}MiB/s"
+                    elif speed_val > 1024:
+                        speed = f"{speed_val / 1024:.2f}KiB/s"
+                    else:
+                        speed = f"{speed_val:.0f}B/s"
+                else:
+                    speed = "-"
+            speed = speed.strip()
+            
+            # Get ETA
+            eta = d.get('_eta_str', '')
+            if not eta:
+                eta_val = d.get('eta', 0)
+                if eta_val:
+                    mins, secs = divmod(int(eta_val), 60)
+                    eta = f"{mins:02d}:{secs:02d}"
+                else:
+                    eta = "-"
+            eta = eta.strip()
+            
+            # Get total size - try multiple fields
+            total_str = d.get('_total_bytes_str', '')
+            if not total_str:
+                total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                if total_bytes > 0:
+                    if total_bytes > 1024 * 1024 * 1024:
+                        total_str = f"{total_bytes / (1024 * 1024 * 1024):.2f}GiB"
+                    elif total_bytes > 1024 * 1024:
+                        total_str = f"{total_bytes / (1024 * 1024):.2f}MiB"
+                    elif total_bytes > 1024:
+                        total_str = f"{total_bytes / 1024:.2f}KiB"
+                    else:
+                        total_str = f"{total_bytes}B"
+                else:
+                    total_str = "-"
+            total_str = total_str.strip()
+            
+            eel.update_progress(percent, speed, eta, total_str)
+        except Exception as e:
+            print(f"[Progress] Error: {e}")
 
 @eel.expose
 def cancel_download():
-    global cancel_flag
+    global cancel_flag, _current_ydl
     cancel_flag = True
+    # Immediately notify UI
+    eel.download_complete(False, "Download cancelled")
     return True
 
 # Main entry point
