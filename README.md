@@ -119,6 +119,26 @@ youtube-downloader-pro/
 4. Push to the branch (`git push origin feature/NewFeature`)
 5. Open a Pull Request
 
+## 🗺️ Roadmap
+
+### v1.2.0 (Coming Soon)
+- [ ] **Batch Downloads** - Download from a list of URLs
+- [ ] **Download Queue** - Queue multiple downloads
+- [ ] **Download History** - Track previously downloaded videos
+- [ ] **Custom Filename Templates** - Choose how files are named
+
+### v1.3.0
+- [ ] **Scheduled Downloads** - Set downloads to start at specific times
+- [ ] **Subtitles Download** - Download subtitles along with video
+- [ ] **Auto-update yt-dlp** - Keep yt-dlp updated automatically
+- [ ] **Browser Extension** - One-click download from browser
+
+### v2.0.0 (Future)
+- [ ] **macOS & Linux Support** - Cross-platform builds
+- [ ] **Video Preview** - Preview before downloading
+- [ ] **Format Converter** - Convert downloaded files to other formats
+- [ ] **Watch Folders** - Monitor folders for URL files to auto-download
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
