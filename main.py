@@ -602,10 +602,24 @@ def progress_hook(d):
                     eta = "-"
             eta = eta.strip()
             
-            # Get total size - try multiple fields
-            total_str = d.get('_total_bytes_str', '')
-            if not total_str:
+            # Get total size - try multiple fields and estimate if needed
+            total_str = d.get('_total_bytes_str', '').strip()
+            if not total_str or total_str == 'N/A':
                 total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                
+                # If no total, try to estimate from downloaded bytes and percent
+                if total_bytes == 0:
+                    downloaded = d.get('downloaded_bytes', 0)
+                    # Parse percent string to get numeric value
+                    percent_str = d.get('_percent_str', '').strip()
+                    if percent_str and downloaded > 0:
+                        try:
+                            pct = float(percent_str.replace('%', '').strip())
+                            if pct > 0:
+                                total_bytes = int(downloaded / pct * 100)
+                        except:
+                            pass
+                
                 if total_bytes > 0:
                     if total_bytes > 1024 * 1024 * 1024:
                         total_str = f"{total_bytes / (1024 * 1024 * 1024):.2f}GiB"
@@ -616,10 +630,17 @@ def progress_hook(d):
                     else:
                         total_str = f"{total_bytes}B"
                 else:
-                    total_str = "-"
-            total_str = total_str.strip()
+                    # Show downloaded bytes if we can't get total
+                    downloaded = d.get('downloaded_bytes', 0)
+                    if downloaded > 1024 * 1024:
+                        total_str = f"~{downloaded / (1024 * 1024):.1f}MiB+"
+                    elif downloaded > 1024:
+                        total_str = f"~{downloaded / 1024:.1f}KiB+"
+                    else:
+                        total_str = "-"
             
             eel.update_progress(percent, speed, eta, total_str)
+
         except Exception as e:
             print(f"[Progress] Error: {e}")
 
