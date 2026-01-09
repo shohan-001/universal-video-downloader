@@ -192,47 +192,91 @@ def get_app_name():
     return APP_NAME
 
 @eel.expose
-def check_for_updates():
-    """Check GitHub for latest release"""
+def check_for_updates(check_nightly=True):
+    """Check GitHub for latest release (stable or nightly)"""
     try:
         import urllib.request
         import json
         
+        # Check stable release first
         req = urllib.request.Request(
             GITHUB_API_URL,
             headers={'User-Agent': 'Universal-Video-Downloader'}
         )
         
         with urllib.request.urlopen(req, timeout=10) as response:
-            data = json.loads(response.read().decode())
+            stable_data = json.loads(response.read().decode())
         
-        latest_version = data.get('tag_name', '').replace('v', '').replace('-universal', '')
+        stable_version = stable_data.get('tag_name', '').replace('v', '').replace('-universal', '')
         current_version = APP_VERSION
         
         # Compare versions
         def parse_version(v):
-            return tuple(map(int, v.split('.')))
+            try:
+                # Handle versions like "1.1.0" 
+                parts = v.split('.')
+                return tuple(map(int, parts[:3]))
+            except:
+                return (0, 0, 0)
         
-        try:
-            is_newer = parse_version(latest_version) > parse_version(current_version)
-        except:
-            is_newer = False
+        stable_is_newer = parse_version(stable_version) > parse_version(current_version)
         
-        # Find download URL for exe
-        download_url = None
-        for asset in data.get('assets', []):
+        # Find download URL for stable exe
+        stable_download_url = None
+        for asset in stable_data.get('assets', []):
             if asset['name'].endswith('.exe'):
-                download_url = asset['browser_download_url']
+                stable_download_url = asset['browser_download_url']
                 break
+        
+        # Check nightly release if enabled
+        nightly_data = None
+        nightly_download_url = None
+        nightly_is_newer = False
+        nightly_commit = None
+        
+        if check_nightly:
+            try:
+                nightly_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/tags/nightly"
+                req_nightly = urllib.request.Request(
+                    nightly_url,
+                    headers={'User-Agent': 'Universal-Video-Downloader'}
+                )
+                
+                with urllib.request.urlopen(req_nightly, timeout=10) as response:
+                    nightly_data = json.loads(response.read().decode())
+                
+                # Get nightly commit from body
+                nightly_body = nightly_data.get('body', '')
+                if 'Commit:' in nightly_body:
+                    nightly_commit = nightly_body.split('Commit:')[1].strip()[:7]
+                
+                # Find nightly exe
+                for asset in nightly_data.get('assets', []):
+                    if asset['name'].endswith('.exe'):
+                        nightly_download_url = asset['browser_download_url']
+                        break
+                
+                # Nightly is "newer" if it exists and has a different publish date
+                if nightly_download_url:
+                    nightly_is_newer = True
+            except:
+                pass  # Nightly may not exist
+        
+        # Determine which update to offer (prefer stable if available)
+        update_available = stable_is_newer or nightly_is_newer
+        download_url = stable_download_url if stable_is_newer else nightly_download_url
+        version_info = stable_version if stable_is_newer else f"nightly ({nightly_commit or 'latest'})"
+        is_nightly = not stable_is_newer and nightly_is_newer
         
         return {
             'success': True,
             'current_version': current_version,
-            'latest_version': latest_version,
-            'update_available': is_newer,
+            'latest_version': version_info,
+            'update_available': update_available,
             'download_url': download_url,
-            'release_notes': data.get('body', ''),
-            'release_url': data.get('html_url', '')
+            'release_notes': stable_data.get('body', '') if stable_is_newer else (nightly_data.get('body', '') if nightly_data else ''),
+            'release_url': stable_data.get('html_url', '') if stable_is_newer else (nightly_data.get('html_url', '') if nightly_data else ''),
+            'is_nightly': is_nightly
         }
     except Exception as e:
         print(f"[Update] Check failed: {e}")
@@ -240,7 +284,8 @@ def check_for_updates():
             'success': False,
             'error': str(e),
             'current_version': APP_VERSION,
-            'update_available': False
+            'update_available': False,
+            'is_nightly': False
         }
 
 @eel.expose
