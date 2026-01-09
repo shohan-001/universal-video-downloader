@@ -499,24 +499,27 @@ async function checkForUpdates(silent = false) {
     try {
         const updateBtn = document.getElementById('updateBtn');
         if (!silent) {
-            updateBtn.textContent = '';
+            updateBtn.innerHTML = '⏳<span class="update-badge" id="updateBadge"></span>';
         }
-        
+
         const result = await eel.check_for_updates()();
-        
-        if (!silent) {
-            updateBtn.textContent = '';
-        }
-        
+
+        // Restore button
+        updateBtn.innerHTML = '🔄<span class="update-badge" id="updateBadge"></span>';
+
+        console.log('Update check result:', result);
+
         if (result.success && result.update_available) {
             // Show update badge
             document.getElementById('updateBadge').classList.add('active');
             updateDownloadUrl = result.download_url;
-            
+
             // Update modal content
-            document.getElementById('updateVersionInfo').textContent = 
-                +result.current_version+  v+result.latest_version;
-            
+            var versionText = result.is_nightly
+                ? 'v' + result.current_version + ' -> ' + result.latest_version
+                : 'v' + result.current_version + ' -> v' + result.latest_version;
+            document.getElementById('updateVersionInfo').textContent = versionText;
+
             // Show modal if not silent or first time
             if (!silent || !localStorage.getItem('updateDismissed_' + result.latest_version)) {
                 showUpdateModal();
@@ -525,13 +528,14 @@ async function checkForUpdates(silent = false) {
             if (result.success) {
                 showStatus('You have the latest version!', 'success');
             } else {
-                showStatus('Failed to check for updates', 'error');
+                showStatus('Failed to check for updates: ' + (result.error || 'Unknown error'), 'error');
             }
         }
     } catch (e) {
         console.error('Update check failed:', e);
+        document.getElementById('updateBtn').innerHTML = '🔄<span class="update-badge" id="updateBadge"></span>';
         if (!silent) {
-            showStatus('Failed to check for updates', 'error');
+            showStatus('Failed to check for updates: ' + e.message, 'error');
         }
     }
 }
@@ -558,12 +562,12 @@ async function downloadAndInstallUpdate() {
         showStatus('No update URL available', 'error');
         return;
     }
-    
+
     // Show progress
     document.getElementById('updateButtons').style.display = 'none';
     document.getElementById('updateProgress').style.display = 'block';
     document.getElementById('updateStatus').textContent = 'Downloading update...';
-    
+
     try {
         await eel.download_update(updateDownloadUrl)();
     } catch (e) {
@@ -587,7 +591,7 @@ async function update_download_complete(success, pathOrError) {
         updatePath = pathOrError;
         document.getElementById('updateStatus').textContent = 'Download complete! Installing...';
         document.getElementById('updateProgressBar').style.width = '100%';
-        
+
         // Apply update after short delay
         setTimeout(async () => {
             try {
