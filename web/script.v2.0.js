@@ -18,6 +18,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (e.key === 'Enter') handleUrlInput();
     });
 
+    // Check for FFmpeg
+    checkFFmpeg();
+
     // Check for updates silently
     setTimeout(() => checkForUpdates(true), 2000);
 
@@ -30,6 +33,62 @@ document.addEventListener('DOMContentLoaded', async function () {
     initParticles();
     window.addEventListener('resize', resizeCanvas);
 });
+
+// ==================== FFMPEG MANAGEMENT ====================
+async function checkFFmpeg() {
+    try {
+        const hasFFmpeg = await eel.check_ffmpeg()();
+        const banner = document.getElementById('ffmpegBanner');
+        if (banner) {
+            banner.style.display = hasFFmpeg ? 'none' : 'flex';
+        }
+    } catch (e) {
+        console.error('FFmpeg check failed:', e);
+    }
+}
+
+async function installFFmpeg() {
+    const btn = document.getElementById('ffmpegDownloadBtn');
+    const statusEl = document.getElementById('ffmpegStatus');
+
+    if (!btn) return;
+
+    // Show loading state
+    btn.disabled = true;
+    btn.querySelector('.ffmpeg-btn-text').style.display = 'none';
+    btn.querySelector('.ffmpeg-btn-loading').style.display = 'inline-flex';
+    statusEl.textContent = 'Downloading FFmpeg... Please wait.';
+
+    try {
+        const success = await eel.install_ffmpeg()();
+        if (success) {
+            const banner = document.getElementById('ffmpegBanner');
+            banner.classList.add('success');
+            statusEl.innerHTML = '<strong>FFmpeg Installed!</strong> MP3 conversion is now available.';
+            btn.style.display = 'none';
+
+            // Hide banner after 3 seconds
+            setTimeout(() => {
+                banner.style.display = 'none';
+            }, 3000);
+        }
+    } catch (e) {
+        console.error('FFmpeg install failed:', e);
+        statusEl.textContent = 'Installation failed. Please try again.';
+        btn.disabled = false;
+        btn.querySelector('.ffmpeg-btn-text').style.display = 'inline';
+        btn.querySelector('.ffmpeg-btn-loading').style.display = 'none';
+    }
+}
+
+// Exposed function for FFmpeg status updates from backend
+eel.expose(update_ffmpeg_status);
+function update_ffmpeg_status(status) {
+    const statusEl = document.getElementById('ffmpegStatus');
+    if (statusEl) {
+        statusEl.textContent = status;
+    }
+}
 
 // ==================== PARTICLES BACKGROUND ====================
 let particleCtx;

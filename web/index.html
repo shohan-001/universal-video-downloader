@@ -95,6 +95,23 @@
                 <span class="hint-icon">💡</span>
                 Supports playlists, channels, and individual videos
             </p>
+
+            <!-- FFmpeg Status Banner -->
+            <div class="ffmpeg-banner" id="ffmpegBanner" style="display: none;">
+                <div class="ffmpeg-content">
+                    <span class="ffmpeg-icon">⚠️</span>
+                    <div class="ffmpeg-text">
+                        <strong>FFmpeg Required</strong>
+                        <span id="ffmpegStatus">MP3 conversion requires FFmpeg. Click to install automatically.</span>
+                    </div>
+                </div>
+                <button class="ffmpeg-download-btn" id="ffmpegDownloadBtn" onclick="installFFmpeg()">
+                    <span class="ffmpeg-btn-text">Download FFmpeg</span>
+                    <span class="ffmpeg-btn-loading" style="display: none;">
+                        <span class="spinner-small"></span>
+                    </span>
+                </button>
+            </div>
         </section>
 
         <!-- Video Info Section (Initially Hidden) -->
