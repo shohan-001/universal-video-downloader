@@ -167,11 +167,24 @@ jobs:
         # Copy application files
         cp -r dist/${{ env.APP_NAME }}/* AppDir/usr/bin/
         
-        # Convert icon to PNG if needed
+        # Convert icon to PNG - handle ICO format properly
         if [ -f "icon.ico" ]; then
-          convert icon.ico -resize 256x256 AppDir/usr/share/icons/hicolor/256x256/apps/${{ env.APP_NAME }}.png
-          cp AppDir/usr/share/icons/hicolor/256x256/apps/${{ env.APP_NAME }}.png AppDir/${{ env.APP_NAME }}.png
+          # ImageMagick creates multiple images from ICO, we need the largest one
+          convert icon.ico[0] -resize 256x256 AppDir/${{ env.APP_NAME }}.png 2>/dev/null || \
+          convert icon.ico -resize 256x256 AppDir/${{ env.APP_NAME }}.png 2>/dev/null || \
+          echo "Icon conversion failed, creating placeholder"
         fi
+        
+        # Create placeholder icon if conversion failed
+        if [ ! -f "AppDir/${{ env.APP_NAME }}.png" ]; then
+          convert -size 256x256 xc:transparent -fill '#667eea' -draw "circle 128,128 128,20" \
+            -fill white -pointsize 80 -gravity center -annotate 0 "UVD" \
+            AppDir/${{ env.APP_NAME }}.png 2>/dev/null || \
+          convert -size 256x256 xc:'#667eea' AppDir/${{ env.APP_NAME }}.png
+        fi
+        
+        # Copy icon to required locations
+        cp AppDir/${{ env.APP_NAME }}.png AppDir/usr/share/icons/hicolor/256x256/apps/ 2>/dev/null || true
         
         # Create .desktop file
         cat > AppDir/${{ env.APP_NAME }}.desktop << EOF
