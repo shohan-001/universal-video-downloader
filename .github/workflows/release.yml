@@ -1,0 +1,281 @@
+name: Multi-Platform Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags
+  workflow_dispatch:  # Allow manual trigger
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'nightly'
+        type: choice
+        options:
+          - stable
+          - nightly
+
+permissions:
+  contents: write
+
+env:
+  APP_NAME: Universal-Video-Downloader
+
+jobs:
+  # ==================== WINDOWS BUILD ====================
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build Windows executable
+      run: |
+        python -m PyInstaller --noconfirm --onefile --windowed `
+          --icon=icon.ico `
+          --name="${{ env.APP_NAME }}" `
+          --add-data="web;web" `
+          --hidden-import=eel `
+          --hidden-import=yt_dlp `
+          --hidden-import=bottle_websocket `
+          main.py
+    
+    - name: Upload Windows artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-build
+        path: dist/${{ env.APP_NAME }}.exe
+
+  # ==================== MACOS BUILD ====================
+  build-macos:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Convert icon to icns (if not exists)
+      run: |
+        if [ ! -f "icon.icns" ]; then
+          # Create iconset from ico or png
+          mkdir -p icon.iconset
+          sips -s format png icon.ico --out icon.iconset/icon_256x256.png 2>/dev/null || cp icon.ico icon.iconset/icon_256x256.png
+          iconutil -c icns icon.iconset -o icon.icns 2>/dev/null || echo "Using default icon"
+        fi
+    
+    - name: Build macOS app
+      run: |
+        python -m PyInstaller --noconfirm --onedir --windowed \
+          --icon=icon.icns \
+          --name="${{ env.APP_NAME }}" \
+          --add-data="web:web" \
+          --hidden-import=eel \
+          --hidden-import=yt_dlp \
+          --hidden-import=bottle_websocket \
+          --osx-bundle-identifier=com.universalvideodownloader.app \
+          main.py
+    
+    - name: Create DMG
+      run: |
+        # Create a temporary folder for DMG contents
+        mkdir -p dmg-contents
+        cp -r "dist/${{ env.APP_NAME }}.app" dmg-contents/
+        
+        # Create symbolic link to Applications folder
+        ln -s /Applications dmg-contents/Applications
+        
+        # Create DMG
+        hdiutil create -volname "${{ env.APP_NAME }}" \
+          -srcfolder dmg-contents \
+          -ov -format UDZO \
+          "dist/${{ env.APP_NAME }}-macOS.dmg"
+    
+    - name: Upload macOS artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-build
+        path: dist/${{ env.APP_NAME }}-macOS.dmg
+
+  # ==================== LINUX BUILD ====================
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libfuse2 imagemagick
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build Linux executable
+      run: |
+        python -m PyInstaller --noconfirm --onedir \
+          --name="${{ env.APP_NAME }}" \
+          --add-data="web:web" \
+          --hidden-import=eel \
+          --hidden-import=yt_dlp \
+          --hidden-import=bottle_websocket \
+          main.py
+    
+    - name: Create AppImage
+      run: |
+        # Download appimagetool
+        wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+        chmod +x appimagetool-x86_64.AppImage
+        
+        # Create AppDir structure
+        mkdir -p AppDir/usr/bin
+        mkdir -p AppDir/usr/share/applications
+        mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+        
+        # Copy application files
+        cp -r dist/${{ env.APP_NAME }}/* AppDir/usr/bin/
+        
+        # Convert icon to PNG if needed
+        if [ -f "icon.ico" ]; then
+          convert icon.ico -resize 256x256 AppDir/usr/share/icons/hicolor/256x256/apps/${{ env.APP_NAME }}.png
+          cp AppDir/usr/share/icons/hicolor/256x256/apps/${{ env.APP_NAME }}.png AppDir/${{ env.APP_NAME }}.png
+        fi
+        
+        # Create .desktop file
+        cat > AppDir/${{ env.APP_NAME }}.desktop << EOF
+        [Desktop Entry]
+        Name=Universal Video Downloader
+        Comment=Download videos from YouTube and 1000+ sites
+        Exec=${{ env.APP_NAME }}
+        Icon=${{ env.APP_NAME }}
+        Type=Application
+        Categories=AudioVideo;Network;
+        Terminal=false
+        EOF
+        
+        # Copy desktop file
+        cp AppDir/${{ env.APP_NAME }}.desktop AppDir/usr/share/applications/
+        
+        # Create AppRun
+        cat > AppDir/AppRun << 'EOF'
+        #!/bin/bash
+        SELF=$(readlink -f "$0")
+        HERE=${SELF%/*}
+        export PATH="${HERE}/usr/bin:${PATH}"
+        exec "${HERE}/usr/bin/${{ env.APP_NAME }}" "$@"
+        EOF
+        chmod +x AppDir/AppRun
+        
+        # Build AppImage
+        ./appimagetool-x86_64.AppImage AppDir dist/${{ env.APP_NAME }}-Linux.AppImage
+    
+    - name: Upload Linux artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-build
+        path: dist/${{ env.APP_NAME }}-Linux.AppImage
+
+  # ==================== CREATE RELEASE ====================
+  create-release:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+    
+    - name: Get version info
+      id: version
+      run: |
+        VERSION=$(grep -oP 'APP_VERSION = "\K[^"]+' main.py || echo "2.0.0")
+        DATE=$(date +%Y-%m-%d)
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "DATE=$DATE" >> $GITHUB_OUTPUT
+    
+    - name: Prepare release files
+      run: |
+        mkdir -p release
+        cp artifacts/windows-build/*.exe release/ 2>/dev/null || true
+        cp artifacts/macos-build/*.dmg release/ 2>/dev/null || true
+        cp artifacts/linux-build/*.AppImage release/ 2>/dev/null || true
+        ls -la release/
+    
+    - name: Delete existing nightly release (if nightly)
+      if: github.event.inputs.release_type == 'nightly' || github.ref == 'refs/heads/main'
+      uses: dev-drprasad/delete-tag-and-release@v1.1
+      with:
+        tag_name: nightly
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        delete_release: true
+      continue-on-error: true
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'nightly' }}
+        name: ${{ github.ref_type == 'tag' && format('🚀 Release {0}', github.ref_name) || format('🌙 Nightly Build ({0})', steps.version.outputs.DATE) }}
+        body: |
+          ## ${{ github.ref_type == 'tag' && 'Stable Release' || 'Nightly Build' }}
+          
+          ${{ github.ref_type != 'tag' && '⚠️ **This is an automated nightly build and may contain bugs.**' || '' }}
+          
+          **Version:** ${{ steps.version.outputs.VERSION }}
+          **Built:** ${{ steps.version.outputs.DATE }}
+          **Commit:** ${{ github.sha }}
+          
+          ### Downloads
+          | Platform | File |
+          |----------|------|
+          | Windows | `${{ env.APP_NAME }}.exe` |
+          | macOS | `${{ env.APP_NAME }}-macOS.dmg` |
+          | Linux | `${{ env.APP_NAME }}-Linux.AppImage` |
+          
+          ### Installation
+          - **Windows:** Download and run the `.exe` file
+          - **macOS:** Download `.dmg`, open it, drag app to Applications
+          - **Linux:** Download `.AppImage`, make executable with `chmod +x`, then run
+          
+          ---
+          
+          [Full Changelog](https://github.com/${{ github.repository }}/commits/main)
+        prerelease: ${{ github.ref_type != 'tag' }}
+        files: release/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

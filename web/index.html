@@ -3,205 +3,342 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Universal Video Downloader</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Universal Video Downloader v2.0</title>
+    <link rel="stylesheet" href="style.v2.0.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script type="text/javascript" src="/eel.js"></script>
-    <link rel="stylesheet" href="style.css">
 </head>
 
+
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🌐 Universal Video Downloader <span id="appVersion" class="version-badge">v1.0.0</span></h1>
-            <p>Download from YouTube, Facebook, Twitter, TikTok, Instagram & 1000+ sites</p>
-            <div class="header-buttons">
-                <button class="icon-btn update-btn" onclick="checkForUpdates()" title="Check for Updates"
-                    id="updateBtn">
-                    🔄
-                    <span class="update-badge" id="updateBadge"></span>
+    <div class="app-container">
+        <!-- Particle Background -->
+        <canvas id="particles" class="particle-bg"></canvas>
+
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <span class="logo-icon">🌐</span>
+                <span class="logo-text">Universal<span class="logo-accent">Downloader</span></span>
+            </div>
+            <div class="header-actions">
+                <button class="header-btn" id="updateBtn" onclick="checkForUpdates()" title="Check for updates">
+                    🔄<span class="update-badge" id="updateBadge"></span>
                 </button>
-                <button class="icon-btn" onclick="openFolder()" title="Open Download Folder">
-                    📂
-                </button>
-                <button class="icon-btn" onclick="toggleTheme()" title="Toggle Theme" id="themeBtn">
-                    🌙
+                <button class="header-btn" id="settingsToggle" onclick="toggleSettings()" title="Settings">
+                    ⚙️
                 </button>
             </div>
-        </div>
+        </header>
 
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <h1 class="hero-title">
+                Download Videos from <span class="gradient-text">Anywhere</span>
+            </h1>
 
-        <div class="input-group">
-            <label for="url">🔗 Video URL <span id="siteBadge" class="site-badge"></span></label>
-            <input type="text" id="url" class="url-input" placeholder="Paste any video URL here..."
-                oninput="handleUrlInput()">
-        </div>
-
-        <div class="video-info" id="videoInfo">
-            <!-- Loading spinner -->
-            <div class="loading-container" id="loadingContainer">
-                <div class="spinner"></div>
-                <p>Fetching video details...</p>
+            <!-- Supported Sites Icons -->
+            <div class="supported-sites">
+                <div class="site-icon" title="YouTube">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                    </svg>
+                </div>
+                <div class="site-icon" title="TikTok">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.03 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.35-1.17.82-1.51 1.45-.61 1.13-.57 2.63.1 3.73.9.9 2.22 1.25 3.42 1.05 1.35-.15 2.54-1.07 3.04-2.34.42-1.05.41-2.22.39-3.35-.01-5.04-.01-10.08-.01-15.12 0-.13-.02-.26-.06-.39z" />
+                    </svg>
+                </div>
+                <div class="site-icon" title="Instagram">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M7.8 2h8.4C19.4 2 22 4.6 22 7.8v8.4a5.8 5.8 0 0 1-5.8 5.8H7.8C4.6 22 2 19.4 2 16.2V7.8A5.8 5.8 0 0 1 7.8 2m-.2 2A3.6 3.6 0 0 0 4 7.6v8.8C4 18.39 5.61 20 7.6 20h8.8a3.6 3.6 0 0 0 3.6-3.6V7.6C20 5.61 18.39 4 16.4 4H7.6m9.65 1.5a1.25 1.25 0 0 1 1.25 1.25A1.25 1.25 0 0 1 17.25 8 1.25 1.25 0 0 1 16 6.75a1.25 1.25 0 0 1 1.25-1.25M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3z" />
+                    </svg>
+                </div>
+                <div class="site-icon" title="Facebook">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M12 2.04c-5.5 0-10 4.49-10 10.02 0 5 3.66 9.15 8.44 9.9v-7H7.9v-2.9h2.54V9.85c0-2.51 1.49-3.89 3.78-3.89 1.09 0 2.23.05 2.23.05v2.46h-1.26c-1.24 0-1.63.77-1.63 1.57v1.88h2.78l-.45 2.9h-2.33v7a10 10 0 0 0 8.44-9.9c0-5.53-4.5-10.02-10-10.02Z" />
+                    </svg>
+                </div>
+                <div class="site-count-badge">
+                    <span class="count-number">1000+</span>
+                    <span class="count-text">Sites</span>
+                </div>
             </div>
-            <!-- Video info content -->
-            <div class="video-info-content" id="videoInfoContent">
-                <img id="thumbnail" src="" alt="Thumbnail" class="thumbnail">
+        </section>
+
+        <!-- URL Input Section -->
+        <section class="url-section">
+            <div class="url-input-container">
+                <span class="url-icon">🔗</span>
+                <input type="text" id="urlInput" class="url-input" placeholder="Paste video or playlist URL here..."
+                    autocomplete="off" spellcheck="false">
+                <span class="site-badge" id="siteBadge"></span>
+                <button class="fetch-btn" id="fetchBtn" onclick="handleUrlInput()">
+                    <span class="fetch-text">Fetch</span>
+                    <span class="fetch-loading" style="display: none;">
+                        <span class="spinner-small"></span>
+                    </span>
+                </button>
+            </div>
+            <p class="url-hint">
+                <span class="hint-icon">💡</span>
+                Supports playlists, channels, and individual videos
+            </p>
+        </section>
+
+        <!-- Video Info Section (Initially Hidden) -->
+        <section class="video-section" id="videoSection" style="display: none;">
+            <div class="video-card">
+                <!-- Video Preview -->
+                <div class="video-preview">
+                    <img id="videoThumbnail" class="video-thumbnail" src="" alt="Video thumbnail">
+                    <span class="video-duration" id="videoDuration"></span>
+                </div>
+
+                <!-- Video Details -->
                 <div class="video-details">
-                    <h3 id="videoTitle">-</h3>
-                    <p><strong>Source:</strong> <span id="videoSite">-</span></p>
-                    <p><strong>Channel:</strong> <span id="videoChannel">-</span></p>
-                    <p><strong>Duration:</strong> <span id="videoDuration">-</span></p>
-                    <p id="playlistInfo" class="playlist-info-text">
-                        📋 Playlist: <span id="playlistTitle">-</span> (<span id="playlistCount">0</span> videos)
-                    </p>
+                    <h2 class="video-title" id="videoTitle">Video Title</h2>
+                    <div class="video-meta">
+                        <span class="meta-item" id="videoSource">
+                            <span class="meta-icon">📺</span>
+                            <span class="meta-text">Source</span>
+                        </span>
+                        <span class="meta-item" id="videoChannel">
+                            <span class="meta-icon">👤</span>
+                            <span class="meta-text">Channel</span>
+                        </span>
+                    </div>
+
+                    <!-- Playlist Info -->
+                    <div class="playlist-info" id="playlistInfo" style="display: none;">
+                        <span class="playlist-icon">📁</span>
+                        <span class="playlist-text" id="playlistText">Playlist: 0 videos</span>
+                        <button class="playlist-view-btn" onclick="openPlaylistModal()">View Videos</button>
+                    </div>
                 </div>
-            </div>
-        </div>
 
-        <div class="playlist-options" id="playlistOptions">
-            <h3>📋 Playlist Options</h3>
-            <div class="radio-group">
-                <label class="radio-option">
-                    <input type="radio" name="playlistMode" value="single" checked onchange="toggleVideoSelection()">
-                    <span>Download this video only</span>
-                </label>
-                <label class="radio-option">
-                    <input type="radio" name="playlistMode" value="all" onchange="toggleVideoSelection()">
-                    <span>Download entire playlist</span>
-                </label>
-                <label class="radio-option">
-                    <input type="radio" name="playlistMode" value="select" onchange="toggleVideoSelection()">
-                    <span>Select specific videos</span>
-                </label>
-            </div>
+                <!-- Download Options -->
+                <div class="download-options">
+                    <div class="option-group">
+                        <label class="option-label">
+                            <span class="option-icon">📹</span>
+                            Download Mode
+                        </label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="downloadMode" value="video" checked
+                                    onchange="updateQualityOptions()">
+                                <span class="radio-custom"></span>
+                                <span class="radio-text">Video (MP4)</span>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="downloadMode" value="audio" onchange="updateQualityOptions()">
+                                <span class="radio-custom"></span>
+                                <span class="radio-text">Audio (MP3)</span>
+                            </label>
+                        </div>
+                    </div>
 
-            <div class="video-selection" id="videoSelection" style="display: none;">
-                <div class="selection-header">
-                    <button class="select-btn" onclick="selectAllVideos()">Select All</button>
-                    <button class="select-btn" onclick="deselectAllVideos()">Deselect All</button>
-                    <span id="selectedCount">0 selected</span>
+                    <div class="option-group">
+                        <label class="option-label">
+                            <span class="option-icon">⚙️</span>
+                            Quality
+                        </label>
+                        <select id="qualitySelect" class="quality-select">
+                            <option value="best">Best Available</option>
+                            <option value="2160">4K (2160p)</option>
+                            <option value="1440">2K (1440p)</option>
+                            <option value="1080">Full HD (1080p)</option>
+                            <option value="720">HD (720p)</option>
+                            <option value="480">SD (480p)</option>
+                            <option value="360">Low (360p)</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="video-list" id="videoList"></div>
-            </div>
-        </div>
 
-        <div class="options-grid">
-            <div class="option-card">
-                <h3>🎥 Download Mode</h3>
-                <div class="radio-group">
-                    <label class="radio-option">
-                        <input type="radio" name="mode" value="video" checked onchange="updateOptions()">
-                        <span>Video (MP4)</span>
+                <!-- Playlist Download Options (shown only for playlists) -->
+                <div class="playlist-mode-options" id="playlistModeOptions" style="display: none;">
+                    <label class="option-label">
+                        <span class="option-icon">📋</span>
+                        Playlist Download Mode
                     </label>
-                    <label class="radio-option">
-                        <input type="radio" name="mode" value="audio" onchange="updateOptions()">
-                        <span>Audio (MP3)</span>
-                    </label>
+                    <div class="radio-group playlist-modes">
+                        <label class="radio-option">
+                            <input type="radio" name="playlistMode" value="single" checked>
+                            <span class="radio-custom"></span>
+                            <span class="radio-text">Download This Video Only</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="playlistMode" value="select">
+                            <span class="radio-custom"></span>
+                            <span class="radio-text">Select Videos to Download</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="playlistMode" value="all">
+                            <span class="radio-custom"></span>
+                            <span class="radio-text">Download Entire Playlist</span>
+                        </label>
+                    </div>
                 </div>
-            </div>
 
-            <div class="option-card">
-                <h3>⚙️ Quality</h3>
-                <select id="quality" title="Video Quality">
-                    <option>Best</option>
-                    <option>1080p</option>
-                    <option>720p</option>
-                    <option>480p</option>
-                    <option>360p</option>
-                </select>
-            </div>
-        </div>
-
-        <div class="cookie-section">
-            <h3>🍪 Authentication (Optional)</h3>
-            <p class="cookie-hint">For private/restricted videos, add your cookies.txt file</p>
-            <div class="cookie-controls">
-                <button class="cookie-btn" onclick="selectCookieFile()">
-                    📁 Select Cookies File
+                <!-- Download Button -->
+                <button class="download-btn" id="downloadBtn" onclick="startDownload()">
+                    <span class="download-icon">⬇️</span>
+                    <span class="download-text">Start Download</span>
                 </button>
-                <span id="cookieStatus" class="cookie-status">No cookies file selected</span>
-            </div>
-            <a href="https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp" target="_blank"
-                rel="noopener" class="cookie-help">
-                ❓ How to export cookies?
-            </a>
-        </div>
 
-        <!-- FFmpeg Section -->
-        <div class="ffmpeg-section" id="ffmpegSection" style="display: none;">
-            <h3>⚠️ FFmpeg Required</h3>
-            <p class="ffmpeg-hint">FFmpeg is required for audio conversion (MP3). Click below to install.</p>
-            <div class="ffmpeg-controls">
-                <button class="ffmpeg-btn" id="ffmpegBtn" onclick="installFFmpeg()">
-                    ⬇️ Install FFmpeg
+                <!-- Progress Section -->
+                <div class="progress-section" id="progressSection" style="display: none;">
+                    <!-- Playlist Progress (shown only during playlist downloads) -->
+                    <div class="playlist-progress" id="playlistProgress" style="display: none;">
+                        <div class="playlist-progress-header">
+                            <span class="playlist-progress-icon">📋</span>
+                            <span class="playlist-progress-count" id="playlistProgressCount">0/0 videos completed</span>
+                        </div>
+                        <div class="current-video-info">
+                            <span class="current-video-label">Now downloading:</span>
+                            <span class="current-video-title" id="currentVideoTitle">-</span>
+                        </div>
+                    </div>
+
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progressBar"></div>
+                    </div>
+                    <div class="progress-stats">
+                        <div class="stat-item">
+                            <span class="stat-icon">⚡</span>
+                            <span class="stat-label">Speed</span>
+                            <span class="stat-value" id="downloadSpeed">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-icon">⏱️</span>
+                            <span class="stat-label">ETA</span>
+                            <span class="stat-value" id="downloadEta">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-icon">📦</span>
+                            <span class="stat-label">Size</span>
+                            <span class="stat-value" id="downloadSize">-</span>
+                        </div>
+                    </div>
+                    <p class="progress-status" id="progressStatus">Preparing download...</p>
+                    <button class="cancel-btn" id="cancelBtn" onclick="cancelDownload()">
+                        <span>⏹️</span> Cancel
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Settings Section (Collapsible) -->
+        <section class="settings-section" id="settingsSection" style="display: none;">
+            <div class="settings-card">
+                <h3 class="settings-title">
+                    <span class="settings-icon">⚙️</span>
+                    Settings
+                </h3>
+
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">📁 Download Folder</span>
+                        <span class="setting-value" id="downloadPath">C:\Users\Downloads</span>
+                    </div>
+                    <button class="setting-btn" onclick="changeDownloadFolder()">Change</button>
+                </div>
+
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">🍪 Cookies File</span>
+                        <span class="setting-value" id="cookiesPath">Not set</span>
+                    </div>
+                    <button class="setting-btn" onclick="selectCookiesFile()">Select</button>
+                </div>
+
+                <button class="setting-btn-secondary" onclick="openDownloadFolder()">
+                    📂 Open Download Folder
                 </button>
-                <span id="ffmpegStatus" class="ffmpeg-status"></span>
             </div>
+        </section>
+
+        <!-- Status Messages -->
+        <div class="status-container" id="statusContainer" style="display: none;">
+            <div class="status-message" id="statusMessage"></div>
         </div>
 
-        <div class="action-buttons">
-            <button class="download-btn" id="downloadBtn" onclick="startDownload()">
-                ⬇️ Start Download
-            </button>
-            <button class="cancel-btn" id="cancelBtn" onclick="cancelDownload()" style="display: none;">
-                ⏹️ Cancel
-            </button>
-        </div>
-
-        <div class="progress-section" id="progressSection">
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill"></div>
-                <div class="progress-text" id="progressText">0%</div>
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p class="footer-text">
+                Made with ❤️ by <a href="https://github.com/shohan-001" target="_blank">Shohan</a>
+            </p>
+            <div class="footer-links">
+                <a href="https://github.com/shohan-001/universal-video-downloader" target="_blank" class="footer-link">
+                    GitHub
+                </a>
             </div>
-
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon">⚡</div>
-                    <div class="label">Speed</div>
-                    <div class="value" id="speed">-</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">⏱️</div>
-                    <div class="label">ETA</div>
-                    <div class="value" id="eta">-</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">💾</div>
-                    <div class="label">Size</div>
-                    <div class="value" id="size">-</div>
-                </div>
-            </div>
-
-            <div class="status-message" id="status">Ready to download</div>
-        </div>
-
-        <div class="footer">
-            <div class="folder-location">
-                <span>📁 Save to: <span id="saveLocation">Loading...</span></span>
-                <button class="change-folder-btn" onclick="changeFolder()" title="Change Download Folder">
-                    📝 Change
-                </button>
-            </div>
-        </div>
+        </footer>
     </div>
 
     <!-- Update Modal -->
-    <div class="update-modal" id="updateModal">
-        <div class="update-modal-content">
-            <h2>🎉 Update Available!</h2>
-            <div class="update-version" id="updateVersionInfo">v1.0.0 → v1.1.0</div>
-            <p id="updateStatus">A new version is available with improvements and bug fixes.</p>
-            <div class="update-progress" id="updateProgress" style="display: none;">
-                <div class="update-progress-bar" id="updateProgressBar"></div>
+    <div class="modal-overlay" id="updateModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">🎉 Update Available!</h3>
+                <button class="modal-close" onclick="closeUpdateModal()">✕</button>
             </div>
-            <div class="update-buttons" id="updateButtons">
-                <button class="update-now" onclick="downloadAndInstallUpdate()">Update Now</button>
-                <button class="update-later" onclick="closeUpdateModal()">Later</button>
+            <div class="modal-body">
+                <p class="update-version" id="updateVersionInfo">v1.0.0 → v2.0.0</p>
+                <p class="update-status" id="updateStatus">A new version is available with improvements and bug fixes.
+                </p>
+                <div class="update-progress" id="updateProgress" style="display: none;">
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="updateProgressBar"></div>
+                    </div>
+                    <span class="update-progress-text" id="updateProgressText">0%</span>
+                </div>
+            </div>
+            <div class="modal-actions" id="updateButtons">
+                <button class="modal-btn secondary" onclick="closeUpdateModal()">Later</button>
+                <button class="modal-btn primary" onclick="downloadAndInstallUpdate()">Update Now</button>
             </div>
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <!-- Playlist Modal -->
+    <div class="modal-overlay" id="playlistModal">
+        <div class="modal-content playlist-modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Select Videos</h3>
+                <button class="modal-close" onclick="closePlaylistModal()">✕</button>
+            </div>
+            <div class="playlist-controls">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()">
+                    <span class="checkmark"></span>
+                    Select All
+                </label>
+                <span class="selection-count" id="selectionCount">0 selected</span>
+            </div>
+            <div class="playlist-list" id="playlistList">
+                <!-- Items injected by JS -->
+            </div>
+            <div class="modal-actions">
+                <button class="modal-btn secondary" onclick="closePlaylistModal()">Cancel</button>
+                <button class="modal-btn primary" onclick="confirmPlaylistSelection()">Confirm Selection</button>
+            </div>
+        </div>
+    </div>
 
+    <script src="script.v2.0.js"></script>
 </body>
 
 </html>

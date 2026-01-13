@@ -2,10 +2,10 @@
 
 A powerful video downloader supporting YouTube, Facebook, Twitter, TikTok, Instagram, and 1000+ other sites. Built with Python and Eel for a native desktop experience.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)
 
 ## Features
 
@@ -34,15 +34,17 @@ A powerful video downloader supporting YouTube, Facebook, Twitter, TikTok, Insta
 
 Download the latest release from the [Releases](https://github.com/shohan-001/youtube-downloader-pro/releases) page.
 
-| File | Description |
-|------|-------------|
-| `Universal-Video-Downloader.exe` | Standalone Windows executable |
+| Platform | File | Installation |
+|----------|------|--------------|
+| Windows | `Universal-Video-Downloader.exe` | Run directly |
+| macOS | `Universal-Video-Downloader-macOS.dmg` | Open DMG, drag to Applications |
+| Linux | `Universal-Video-Downloader-Linux.AppImage` | `chmod +x` then run |
 
 ## Quick Start
 
 ### Option 1: Download Executable (Recommended)
 
-1. Download `Universal-Video-Downloader.exe` from [Releases](https://github.com/shohan-001/youtube-downloader-pro/releases)
+1. Download the appropriate file for your platform from [Releases](https://github.com/shohan-001/youtube-downloader-pro/releases)
 2. Run the application
 3. Paste any video URL and click Download
 
@@ -51,15 +53,21 @@ Download the latest release from the [Releases](https://github.com/shohan-001/yo
 ```bash
 git clone https://github.com/shohan-001/youtube-downloader-pro.git
 cd youtube-downloader-pro
-git checkout universal-downloader
 pip install -r requirements.txt
 python main.py
 ```
 
 ### Building the Executable
 
+**Windows:**
 ```bash
 build_exe.bat
+```
+
+**macOS/Linux:**
+```bash
+chmod +x build.sh
+./build.sh
 ```
 
 ## Usage
@@ -94,7 +102,7 @@ For private/restricted videos:
 
 ## Requirements
 
-- Windows 10/11
+- Windows 10/11, macOS 10.14+, or Linux
 - Microsoft Edge, Chrome, Brave, or any modern browser
 
 ## Project Structure

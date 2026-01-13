@@ -13,7 +13,7 @@ from pathlib import Path
 
 # App Info
 APP_NAME = "Universal Video Downloader"
-APP_VERSION = "1.1.0"
+APP_VERSION = "2.0.0"
 APP_AUTHOR = "Shohan"
 GITHUB_REPO = "shohan-001/universal-video-downloader"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
@@ -37,6 +37,53 @@ download_folder = str(Path.home() / "Downloads")
 cookies_file = None
 cancel_flag = False
 _app_closing = False
+
+# Playlist download tracking
+_playlist_current_index = 0
+_playlist_total_count = 0
+_playlist_current_title = ""
+_playlist_entries = []
+
+# Helper function to strip ANSI codes from yt-dlp output
+import re
+def strip_ansi(text):
+    """Remove ANSI escape codes from string"""
+    if not text:
+        return ""
+    ansi_pattern = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_pattern.sub('', str(text))
+
+def clean_title(title):
+    """Clean up video title by removing social metadata (reactions, comments, etc.)"""
+    if not title:
+        return "video"
+    
+    # Remove patterns like "93 reactions · 28 comments |" or "93 reactions · 28 comments"
+    title = re.sub(r'\d+\s*(reactions?|likes?|comments?|shares?|views?)\s*(·|\|)?\s*', '', title, flags=re.IGNORECASE)
+    
+    # Remove leading/trailing special characters and whitespace
+    title = re.sub(r'^[\s·|\-:]+', '', title)
+    title = re.sub(r'[\s·|\-:]+$', '', title)
+    
+    # Limit length
+    if len(title) > 100:
+        title = title[:100]
+    
+    return title.strip() or "video"
+
+def sanitize_folder_name(name):
+    """Sanitize folder name by removing invalid characters"""
+    if not name:
+        return "playlist"
+    # Remove characters invalid for Windows folder names
+    invalid_chars = r'[<>:"/\\|?*]'
+    sanitized = re.sub(invalid_chars, '_', name)
+    # Remove trailing periods and spaces
+    sanitized = sanitized.rstrip('. ')
+    # Limit length
+    if len(sanitized) > 100:
+        sanitized = sanitized[:100]
+    return sanitized.strip() or "playlist"
 
 # Popular supported sites (yt-dlp supports 1000+ sites)
 SUPPORTED_SITES = {
@@ -65,14 +112,16 @@ SUPPORTED_SITES = {
     'mixcloud.com': 'Mixcloud',
 }
 
-def force_exit():
+def force_exit(route=None, sockets=None):
+    print(f"[App] force_exit called! Route: {route}, Sockets: {sockets}")
     global _app_closing
     if _app_closing:
         return
     _app_closing = True
+    print("[App] Exiting...")
     os._exit(0)
 
-atexit.register(force_exit)
+# NOTE: Removed atexit.register(force_exit) - it was causing premature exits
 
 # Browser detection functions
 def find_edge_path():
@@ -136,6 +185,14 @@ def save_config():
             json.dump(config, f, indent=2)
     except Exception as e:
         print(f"[Config] Error saving: {e}")
+
+@eel.expose
+def get_config():
+    """Return current config for JavaScript"""
+    return {
+        'download_folder': download_folder,
+        'cookies_file': cookies_file
+    }
 
 # FFmpeg functions
 def get_ffmpeg_path():
@@ -455,12 +512,21 @@ def fetch_video_info(url):
     try:
         print(f"[Info] Fetching: {url}")
         
+        # Check if this is a YouTube Mix/Radio playlist (dynamically generated)
+        is_youtube_mix = 'list=RD' in url or 'list=RDMM' in url
+        
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'skip_download': True,
-            'extract_flat': 'in_playlist',
+            'extract_flat': True,  # Fast extraction
+            'socket_timeout': 30,
         }
+        
+        # Limit YouTube Mix playlists since they're dynamically generated (infinite)
+        if is_youtube_mix:
+            ydl_opts['playlist_end'] = 50  # Only get first 50 videos
+            print(f"[Info] YouTube Mix detected - limiting to 50 entries")
         
         if cookies_file and os.path.exists(cookies_file):
             ydl_opts['cookiefile'] = cookies_file
@@ -473,6 +539,47 @@ def fetch_video_info(url):
         
         # Check if playlist
         is_playlist = info.get('_type') == 'playlist'
+        entries_data = []
+        playlist_thumbnail = None
+        
+        if is_playlist:
+            entries = info.get('entries', [])
+            print(f"[Info] Playlist detected with {len(entries)} raw entries")
+            
+            # Get thumbnail from first valid entry if available
+            for entry in entries:
+                if entry and entry.get('id'):
+                    playlist_thumbnail = entry.get('thumbnail') or (entry.get('thumbnails', [{}])[0].get('url') if entry.get('thumbnails') else None)
+                    if playlist_thumbnail:
+                        break
+            
+            # Get all VALID entries (filter out None and placeholder entries)
+            for i, e in enumerate(entries):
+                # Only include entries with valid ID and title
+                if e and e.get('id'):
+                    title = e.get('title') or e.get('id', 'Unknown Video')
+                    # Skip entries that are just video IDs (placeholders)
+                    if title and title != '[Deleted video]' and title != '[Private video]':
+                        # Format duration if available
+                        duration_secs = e.get('duration')
+                        if duration_secs:
+                            mins, secs = divmod(int(duration_secs), 60)
+                            duration_str = f"{mins}:{secs:02d}"
+                        else:
+                            duration_str = None
+                        
+                        entries_data.append({
+                            'index': len(entries_data),  # Use actual index in filtered list
+                            'original_index': i,  # Keep original index for yt-dlp
+                            'id': e.get('id'),
+                            'title': title,
+                            'duration': duration_secs,
+                            'duration_str': duration_str,
+                            'uploader': e.get('uploader') or e.get('channel'),
+                            'thumbnail': e.get('thumbnail') or f"https://i.ytimg.com/vi/{e.get('id')}/mqdefault.jpg"
+                        })
+            
+            print(f"[Info] Valid playlist entries: {len(entries_data)}")
         
         # Get formats for quality detection
         available_qualities = ['Best']
@@ -508,11 +615,13 @@ def fetch_video_info(url):
             'title': info.get('title', 'Unknown'),
             'channel': info.get('channel') or info.get('uploader') or 'Unknown',
             'duration': duration,
-            'thumbnail': info.get('thumbnail', ''),
+            'thumbnail': info.get('thumbnail') or playlist_thumbnail or '',
             'qualities': available_qualities if len(available_qualities) > 1 else ['Best', '1080p', '720p', '480p', '360p'],
             'is_playlist': is_playlist,
+            'is_mix': is_youtube_mix,  # YouTube Mix/Radio playlist flag
             'playlist_title': info.get('title', '') if is_playlist else '',
-            'playlist_count': len(info.get('entries', [])) if is_playlist else 0,
+            'playlist_count': len(entries_data) if is_playlist else 0,
+            'entries': entries_data,
             'site': site_info['site'],
             'extractor': info.get('extractor', 'Unknown'),
         }
@@ -527,21 +636,107 @@ def fetch_video_info(url):
 @eel.expose
 def start_download(url, mode='video', quality='Best', playlist_mode='single', selected_indices=None):
     """Download video/audio from any supported site"""
-    global cancel_flag
+    global cancel_flag, _playlist_current_index, _playlist_total_count, _playlist_current_title, _playlist_entries
     cancel_flag = False
+    _playlist_current_index = 0
+    _playlist_total_count = 0
+    _playlist_current_title = ""
+    _playlist_entries = []
     
     def download_thread():
-        global cancel_flag
+        global cancel_flag, _playlist_current_index, _playlist_total_count, _playlist_current_title, _playlist_entries
         try:
             print(f"[Download] Starting: {url}")
-            print(f"[Download] Mode: {mode}, Quality: {quality}")
+            print(f"[Download] Mode: {mode}, Quality: {quality}, Playlist Mode: {playlist_mode}")
             
             ffmpeg_path = get_ffmpeg_path()
+            target_folder = download_folder
+            
+            # For playlist downloads, create a subfolder with playlist name
+            is_playlist_download = playlist_mode in ['all', 'select']
+            
+            if is_playlist_download:
+                # Fetch playlist info to get title and entries
+                fetch_opts = {
+                    'quiet': True,
+                    'no_warnings': True,
+                    'skip_download': True,
+                    'extract_flat': True,
+                }
+                if cookies_file and os.path.exists(cookies_file):
+                    fetch_opts['cookiefile'] = cookies_file
+                
+                with yt_dlp.YoutubeDL(fetch_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                
+                if info and info.get('_type') == 'playlist':
+                    playlist_title = info.get('title', 'Playlist')
+                    entries = info.get('entries', [])
+                    
+                    # If selecting specific indices, filter entries
+                    if playlist_mode == 'select' and selected_indices:
+                        _playlist_entries = [entries[i] for i in selected_indices if i < len(entries)]
+                        _playlist_total_count = len(_playlist_entries)
+                    else:
+                        _playlist_entries = entries
+                        _playlist_total_count = len(entries)
+                    
+                    # Create subfolder for playlist
+                    folder_name = sanitize_folder_name(playlist_title)
+                    target_folder = os.path.join(download_folder, folder_name)
+                    os.makedirs(target_folder, exist_ok=True)
+                    print(f"[Download] Created playlist folder: {target_folder}")
+                    print(f"[Download] Total videos to download: {_playlist_total_count}")
+                    
+                    # Send initial playlist progress
+                    eel.update_playlist_progress(0, _playlist_total_count, "Starting...", True)
+            
+            # Determine if we need title cleaning (only for Facebook/social sites with metadata in title)
+            needs_title_cleaning = any(site in url.lower() for site in ['facebook.com', 'fb.watch', 'fb.com'])
+            
+            if needs_title_cleaning and not is_playlist_download:
+                # Pre-fetch and clean title for Facebook-type sites
+                with yt_dlp.YoutubeDL({'quiet': True, 'skip_download': True, 'noplaylist': True}) as ydl:
+                    try:
+                        info = ydl.extract_info(url, download=False)
+                        raw_title = info.get('title', 'video')
+                        cleaned_title = clean_title(raw_title)
+                        print(f"[Download] Original title: {raw_title[:50]}...")
+                        print(f"[Download] Cleaned title: {cleaned_title}")
+                        outtmpl = os.path.join(target_folder, f'{cleaned_title}.%(ext)s')
+                    except:
+                        outtmpl = os.path.join(target_folder, '%(title).100s.%(ext)s')
+            else:
+                # Use yt-dlp's default title handling
+                outtmpl = os.path.join(target_folder, '%(title).100s.%(ext)s')
+            
+            # Progress hook for playlist tracking
+            def playlist_progress_hook(d):
+                global _playlist_current_index, _playlist_current_title
+                
+                # Call the main progress hook
+                progress_hook(d)
+                
+                if is_playlist_download and d['status'] == 'downloading':
+                    # Extract current video title from filename if available
+                    filename = d.get('filename', '')
+                    if filename:
+                        base = os.path.basename(filename)
+                        title = os.path.splitext(base)[0].replace('_', ' ')[:50]
+                        if title and title != _playlist_current_title:
+                            _playlist_current_title = title
+                            eel.update_playlist_progress(_playlist_current_index, _playlist_total_count, title, True)
+                
+                if is_playlist_download and d['status'] == 'finished':
+                    _playlist_current_index += 1
+                    print(f"[Download] Completed video {_playlist_current_index}/{_playlist_total_count}")
+                    eel.update_playlist_progress(_playlist_current_index, _playlist_total_count, _playlist_current_title, True)
             
             # Base options
             ydl_opts = {
-                'outtmpl': os.path.join(download_folder, '%(title)s.%(ext)s'),
-                'progress_hooks': [progress_hook],
+                'outtmpl': outtmpl,
+                'restrictfilenames': True,  # Replace special chars with underscores
+                'progress_hooks': [playlist_progress_hook],
                 'quiet': True,
                 'no_warnings': True,
                 # Speed optimizations
@@ -576,11 +771,16 @@ def start_download(url, mode='video', quality='Best', playlist_mode='single', se
                     'preferredquality': '320',
                 }]
             else:
-                if quality == 'Best':
+                # Handle video quality selection
+                if quality.lower() == 'best':
                     ydl_opts['format'] = 'bestvideo+bestaudio/best'
                 else:
-                    height = quality.replace('p', '').split(' ')[0]
-                    ydl_opts['format'] = f'bestvideo[height<={height}]+bestaudio/best[height<={height}]/best'
+                    # Extract numeric height from quality string (e.g., "1080p", "720p (2K)")
+                    height = ''.join(filter(str.isdigit, quality.split('p')[0].split(' ')[0]))
+                    if height:
+                        ydl_opts['format'] = f'bestvideo[height<={height}]+bestaudio/best[height<={height}]/best'
+                    else:
+                        ydl_opts['format'] = 'bestvideo+bestaudio/best'
                 
                 ydl_opts['merge_output_format'] = 'mp4'
             
@@ -588,6 +788,9 @@ def start_download(url, mode='video', quality='Best', playlist_mode='single', se
                 ydl.download([url])
             
             if not cancel_flag:
+                # Send final playlist progress
+                if is_playlist_download:
+                    eel.update_playlist_progress(_playlist_current_index, _playlist_total_count, "All downloads complete!", False)
                 eel.download_complete(True, "Download completed!")
             
         except Exception as e:
@@ -607,19 +810,19 @@ def progress_hook(d):
     global cancel_flag
     if cancel_flag:
         raise yt_dlp.utils.DownloadCancelled("Download cancelled by user")
+    global _current_ydl # Changed from cancel_flag to _current_ydl
     
     if d['status'] == 'downloading':
         try:
-            # Get percent - try multiple fields
-            percent = d.get('_percent_str', '')
-            if not percent:
-                downloaded = d.get('downloaded_bytes', 0)
-                total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
-                if total > 0:
-                    percent = f"{(downloaded / total) * 100:.1f}%"
-                else:
-                    percent = "0%"
-            percent = percent.strip()
+            # Calculate progress
+            if d.get('total_bytes'):
+                p = d['downloaded_bytes'] / d['total_bytes'] * 100
+            elif d.get('total_bytes_estimate'):
+                p = d['downloaded_bytes'] / d['total_bytes_estimate'] * 100
+            else:
+                p = 0
+                
+            percentage = f"{p:.1f}%"
             
             # Get speed
             speed = d.get('_speed_str', '')
@@ -634,8 +837,9 @@ def progress_hook(d):
                         speed = f"{speed_val:.0f}B/s"
                 else:
                     speed = "-"
-            speed = speed.strip()
+            speed = strip_ansi(speed.strip())
             
+            # Get ETA
             # Get ETA
             eta = d.get('_eta_str', '')
             if not eta:
@@ -643,51 +847,21 @@ def progress_hook(d):
                 if eta_val:
                     mins, secs = divmod(int(eta_val), 60)
                     eta = f"{mins:02d}:{secs:02d}"
-                else:
-                    eta = "-"
-            eta = eta.strip()
+            eta = strip_ansi(str(eta).strip())
             
-            # Get total size - try multiple fields and estimate if needed
-            total_str = d.get('_total_bytes_str', '').strip()
-            if not total_str or total_str == 'N/A':
-                total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
-                
-                # If no total, try to estimate from downloaded bytes and percent
-                if total_bytes == 0:
-                    downloaded = d.get('downloaded_bytes', 0)
-                    # Parse percent string to get numeric value
-                    percent_str = d.get('_percent_str', '').strip()
-                    if percent_str and downloaded > 0:
-                        try:
-                            pct = float(percent_str.replace('%', '').strip())
-                            if pct > 0:
-                                total_bytes = int(downloaded / pct * 100)
-                        except:
-                            pass
-                
-                if total_bytes > 0:
-                    if total_bytes > 1024 * 1024 * 1024:
-                        total_str = f"{total_bytes / (1024 * 1024 * 1024):.2f}GiB"
-                    elif total_bytes > 1024 * 1024:
-                        total_str = f"{total_bytes / (1024 * 1024):.2f}MiB"
-                    elif total_bytes > 1024:
-                        total_str = f"{total_bytes / 1024:.2f}KiB"
-                    else:
-                        total_str = f"{total_bytes}B"
-                else:
-                    # Show downloaded bytes if we can't get total
-                    downloaded = d.get('downloaded_bytes', 0)
-                    if downloaded > 1024 * 1024:
-                        total_str = f"~{downloaded / (1024 * 1024):.1f}MiB+"
-                    elif downloaded > 1024:
-                        total_str = f"~{downloaded / 1024:.1f}KiB+"
-                    else:
-                        total_str = "-"
+            # Get size
+            size = ""
+            if d.get('total_bytes'):
+                size = f"{d['total_bytes'] / (1024 * 1024):.2f}MiB"
+            elif d.get('total_bytes_estimate'):
+                size = f"~{d['total_bytes_estimate'] / (1024 * 1024):.2f}MiB"
+            elif d.get('downloaded_bytes'):
+                 size = f"{d['downloaded_bytes'] / (1024 * 1024):.2f}MiB+"
             
-            eel.update_progress(percent, speed, eta, total_str)
-
+            # Send to UI
+            eel.update_progress(percentage, speed, eta, size)
         except Exception as e:
-            print(f"[Progress] Error: {e}")
+            print(f"[Error] Progress hook error: {e}")
 
 @eel.expose
 def cancel_download():
@@ -699,6 +873,7 @@ def cancel_download():
 
 # Main entry point
 if __name__ == '__main__':
+    print("--- Starting Universal Video Downloader v2.1 ---")
     load_config()
     
     browser_path = find_any_chromium_browser()
@@ -707,16 +882,23 @@ if __name__ == '__main__':
         if browser_path:
             eel.start('index.html', 
                      mode='custom',
-                     cmdline_args=[browser_path, '--app=http://localhost:8000/index.html'],
-                     size=(950, 850),
+                     cmdline_args=[
+                         browser_path, 
+                         '--app=http://localhost:8000/index.html',
+                         '--enable-features=Vulkan',
+                         '--force-device-scale-factor=1'
+                     ],
+                     size=(800, 600),
                      port=8000,
+                     shutdown_delay=30.0,  # Allow 30 seconds for pending requests
                      close_callback=force_exit)
         else:
             print("[App] No Chromium browser found, using default browser")
             eel.start('index.html', 
                      mode='default',
-                     size=(950, 850),
+                     size=(800, 600),
                      port=8000,
+                     shutdown_delay=30.0,  # Allow 30 seconds for pending requests
                      close_callback=force_exit)
     except (SystemExit, KeyboardInterrupt):
         pass
