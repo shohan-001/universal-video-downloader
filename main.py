@@ -313,9 +313,12 @@ def check_for_updates(check_nightly=True):
                         nightly_download_url = asset['browser_download_url']
                         break
                 
-                # Nightly is "newer" if it exists and has a different publish date
-                if nightly_download_url:
-                    nightly_is_newer = True
+                # Nightly is "newer" only if stable is not newer and we're running a release version
+                # Don't offer nightly if user already has the latest stable
+                if nightly_download_url and not stable_is_newer:
+                    # Only consider nightly new if stable version matches current
+                    # (means user is on latest stable but nightly has new commits)
+                    nightly_is_newer = parse_version(stable_version) <= parse_version(current_version)
             except:
                 pass  # Nightly may not exist
         
@@ -764,7 +767,9 @@ def start_download(url, mode='video', quality='Best', playlist_mode='single', se
             
             # Format selection
             if mode == 'audio':
-                ydl_opts['format'] = 'bestaudio/best'
+                # Use bestaudio only - avoid downloading video
+                ydl_opts['format'] = 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best'
+                ydl_opts['extract_audio'] = True
                 ydl_opts['postprocessors'] = [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
